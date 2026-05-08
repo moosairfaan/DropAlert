@@ -1,19 +1,27 @@
 """
-StockX Playwright scrapers. StockX often serves Cloudflare challenges to headless
-browsers; use a headed browser, stealth plugins, or a proxy if you need this to
-pass in production.
+StockX Playwright scrapers. Always runs **headless** by default so the pipeline
+never opens a window on your machine.
 
-If you see timeouts on [data-testid="product-card"], try:
+StockX often serves Cloudflare challenges to automation; in headless mode you
+may get **zero items** — that is expected.
 
-  STOCKX_HEADLESS=0 ./venv/bin/python scrapers/stockx.py
-
-headed Chromium often passes the challenge once; CI / servers may still need a
-residential proxy.
+Mitigations (pick one or combine):
+- **Residential proxy**: set ``STOCKX_PROXY`` (or standard ``HTTPS_PROXY``) to a
+  proxy URL Playwright can use, e.g. ``http://user:pass@host:port`` or
+  ``socks5://...``. Optional: ``STOCKX_PROXY_USERNAME`` / ``STOCKX_PROXY_PASSWORD``
+  if your provider splits credentials from the URL.
+- **Hosted runner**: deploy the scraper on Railway (or similar) so traffic
+  comes from a datacenter IP; you may still need a **residential** proxy for
+  StockX specifically.
+- **Debug only**: ``STOCKX_DEBUG_BROWSER=1`` opens a visible Chromium window.
+- **Give up on HTML**: use another API/source for market data.
 """
 
 import asyncio
+import logging
 import os
 import re
+from typing import Any
 from urllib.parse import quote, urljoin
 
 from playwright.async_api import Locator, Playwright
@@ -26,17 +34,42 @@ TRENDING_URL = "https://stockx.com/sneakers?sort=trending"
 BASE_ORIGIN = "https://stockx.com"
 MAX_ITEMS = 15
 
+_log = logging.getLogger(__name__)
+
 
 def _extra_headers() -> dict[str, str]:
     return {"Accept-Language": "en-US,en;q=0.9"}
 
 
-def _headless() -> bool:
-    return os.environ.get("STOCKX_HEADLESS", "1").lower() not in (
-        "0",
-        "false",
-        "no",
+def _visible_browser_for_debug() -> bool:
+    """Opt-in only: opens a real Chromium window (annoying for daily runs)."""
+    return os.environ.get("STOCKX_DEBUG_BROWSER", "").lower() in (
+        "1",
+        "true",
+        "yes",
     )
+
+
+def _playwright_proxy() -> dict[str, str] | None:
+    """
+    Optional proxy for Chromium (helps with some Cloudflare / geo cases).
+    Prefer STOCKX_PROXY; fall back to HTTPS_PROXY for compatibility with CLI tools.
+    """
+    raw = (os.getenv("STOCKX_PROXY") or os.getenv("HTTPS_PROXY") or "").strip()
+    if not raw:
+        return None
+    cfg: dict[str, str] = {"server": raw}
+    user = (os.getenv("STOCKX_PROXY_USERNAME") or os.getenv("PROXY_USERNAME") or "").strip()
+    password = (
+        os.getenv("STOCKX_PROXY_PASSWORD") or os.getenv("PROXY_PASSWORD") or ""
+    ).strip()
+    if user:
+        cfg["username"] = user
+    if password:
+        cfg["password"] = password
+    host_for_log = raw.split("@")[-1] if "@" in raw else raw
+    _log.info("StockX: using HTTP proxy for browser traffic (%s)", host_for_log)
+    return cfg
 
 
 async def _cloudflare_challenge(page) -> bool:
@@ -48,15 +81,25 @@ async def _cloudflare_challenge(page) -> bool:
 
 
 async def _new_stockx_page(p: Playwright):
+    visible = _visible_browser_for_debug()
+    if visible:
+        _log.warning(
+            "STOCKX_DEBUG_BROWSER is set: opening a visible Chromium window for StockX. "
+            "Unset it for normal headless runs (no pop-up)."
+        )
     browser = await p.chromium.launch(
-        headless=_headless(),
+        headless=not visible,
         args=["--disable-blink-features=AutomationControlled"],
     )
-    context = await browser.new_context(
-        user_agent=STOCKX_UA,
-        locale="en-US",
-        viewport={"width": 1280, "height": 800},
-    )
+    ctx_opts: dict[str, Any] = {
+        "user_agent": STOCKX_UA,
+        "locale": "en-US",
+        "viewport": {"width": 1280, "height": 800},
+    }
+    proxy = _playwright_proxy()
+    if proxy:
+        ctx_opts["proxy"] = proxy
+    context = await browser.new_context(**ctx_opts)
     page = await context.new_page()
     await page.set_extra_http_headers(_extra_headers())
     return browser, page
@@ -184,11 +227,15 @@ async def scrape_stockx() -> list[dict]:
                 except PlaywrightTimeoutError:
                     if await _cloudflare_challenge(page):
                         print(
-                            "StockX: Cloudflare challenge — no product grid. "
-                            "Try STOCKX_HEADLESS=0 or a headed browser / proxy."
+                            "StockX: Cloudflare challenge — no product grid in headless mode. "
+                            "Optional debug: STOCKX_DEBUG_BROWSER=1 (opens a window). "
+                            "Or use a proxy / run off your laptop."
                         )
                     else:
-                        print("StockX: timed out waiting for product cards.")
+                        print(
+                            "StockX: timed out waiting for product cards. "
+                            "Try a residential proxy: set STOCKX_PROXY or HTTPS_PROXY in scraper/.env."
+                        )
                     return []
 
                 cards = page.locator('[data-testid="product-card"]')
@@ -223,11 +270,14 @@ async def get_resell_estimate(product_name: str) -> float | None:
                 except PlaywrightTimeoutError:
                     if await _cloudflare_challenge(page):
                         print(
-                            "StockX search: Cloudflare challenge. "
-                            "Try STOCKX_HEADLESS=0 or a headed browser / proxy."
+                            "StockX search: Cloudflare in headless mode. "
+                            "Optional: STOCKX_DEBUG_BROWSER=1 (opens a window)."
                         )
                     else:
-                        print("StockX search: timed out waiting for product cards.")
+                        print(
+                            "StockX search: timed out. "
+                            "Try STOCKX_PROXY / HTTPS_PROXY (residential proxy often required)."
+                        )
                     return None
 
                 card = page.locator('[data-testid="product-card"]').first
