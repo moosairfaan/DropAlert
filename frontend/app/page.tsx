@@ -225,7 +225,7 @@ export default async function Home() {
         <footer className="mt-16 flex flex-col items-center justify-center gap-2 border-t border-zinc-800 pt-10 text-center text-sm text-zinc-500">
           <p>© 2025 DropAlert · Built by Moosa Irfaan</p>
           <Link
-            href="https://github.com/moosairfaan/dropalert"
+            href="https://github.com/moosairfaan/DropAlert"
             className="text-zinc-400 underline-offset-4 hover:text-white hover:underline"
           >
             GitHub
