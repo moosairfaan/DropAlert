@@ -7,11 +7,13 @@ from scrapers.nike import scrape_nike
 from scrapers.stockx import scrape_stockx
 from db import (
     insert_drop,
+    update_drop_resell_estimate,
     get_subscribers_for_brand,
     has_alert_been_sent,
     log_alert_sent,
     get_stats,
 )
+from scrapers.stockx import get_resell_estimate
 from redis_client import is_already_alerted, mark_as_alerted
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -58,6 +60,14 @@ async def run_pipeline() -> dict:
             # Drop already in DB (UNIQUE conflict) but Redis key missing — mark it
             mark_as_alerted(brand, name)
             continue
+
+        try:
+            estimate = await get_resell_estimate(drop["name"])
+            if estimate:
+                update_drop_resell_estimate(drop_id, estimate)
+                log.info(f'Resell estimate for {drop["name"]}: ${estimate}')
+        except Exception as e:
+            log.warning(f"Could not get resell estimate: {e}")
 
         # New drop — alert subscribers
         log.info(f"NEW DROP: {brand} - {name}")

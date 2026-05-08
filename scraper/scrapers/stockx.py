@@ -21,6 +21,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 from typing import Any
 from urllib.parse import quote, urljoin
 
@@ -34,7 +35,28 @@ TRENDING_URL = "https://stockx.com/sneakers?sort=trending"
 BASE_ORIGIN = "https://stockx.com"
 MAX_ITEMS = 15
 
+# In-process cache: normalized query -> (price | None, monotonic expiry).
+_RESELL_ESTIMATE_CACHE: dict[str, tuple[float | None, float]] = {}
+_RESELL_TTL_HIT_S = 86_400.0  # 24h — same product name unlikely to change intraday
+_RESELL_TTL_MISS_S = 1_800.0  # 30m — retry Cloudflare / transient failures sooner
+
+
 _log = logging.getLogger(__name__)
+
+
+def _resell_cache_key(product_name: str) -> str:
+    return " ".join(product_name.split()).strip().lower()
+
+
+def _maybe_trim_resell_cache() -> None:
+    if len(_RESELL_ESTIMATE_CACHE) <= 1_500:
+        return
+    now = time.monotonic()
+    stale = [k for k, (_, exp) in _RESELL_ESTIMATE_CACHE.items() if exp <= now]
+    for k in stale:
+        del _RESELL_ESTIMATE_CACHE[k]
+    if len(_RESELL_ESTIMATE_CACHE) > 1_500:
+        _RESELL_ESTIMATE_CACHE.clear()
 
 
 def _extra_headers() -> dict[str, str]:
@@ -139,6 +161,48 @@ def _parse_price_from_text(text: str) -> float | None:
             except ValueError:
                 pass
     return candidates[0] if candidates else None
+
+
+async def _first_product_href_from_card(card: Locator) -> str | None:
+    """Best-effort PDP link from a search-result product card."""
+    for testid in (
+        "product-card-title",
+        "ProductTile-Name",
+        "product-tile-title",
+        "product-card-name",
+    ):
+        loc = card.locator(f'[data-testid="{testid}"]')
+        if await loc.count() > 0:
+            link = loc.locator('a[href^="/"]').first
+            if await link.count() > 0:
+                href = await link.get_attribute("href")
+                if href:
+                    return href.split("?")[0]
+    links = card.locator('a[href^="/"]')
+    n = await links.count()
+    for i in range(n):
+        href = await links.nth(i).get_attribute("href") or ""
+        if not href or href.startswith("//"):
+            continue
+        low = href.lower()
+        if any(
+            x in low
+            for x in (
+                "/search",
+                "/login",
+                "/signup",
+                "/help",
+                "/about",
+                "/sell",
+                "/buying",
+            )
+        ):
+            continue
+        seg = href.strip("/").split("/")
+        if len(seg) < 1:
+            continue
+        return href.split("?")[0]
+    return None
 
 
 async def _extract_card(card: Locator) -> dict | None:
@@ -255,39 +319,78 @@ async def scrape_stockx() -> list[dict]:
         return []
 
 
+async def _fetch_resell_price_playwright(
+    p: Playwright, product_name: str
+) -> float | None:
+    """
+    Search StockX, open the first hit PDP when possible (clearer Last Sale),
+    else parse the search card only.
+    """
+    browser, page = await _new_stockx_page(p)
+    try:
+        q = quote(product_name, safe="")
+        search_url = f"{BASE_ORIGIN}/search?s={q}"
+        await _goto_and_settle(page, search_url)
+        try:
+            await page.wait_for_selector(
+                '[data-testid="product-card"]', timeout=15_000
+            )
+        except PlaywrightTimeoutError:
+            if await _cloudflare_challenge(page):
+                _log.warning(
+                    "StockX search: Cloudflare in headless mode. "
+                    "Optional: STOCKX_DEBUG_BROWSER=1 (opens a window)."
+                )
+            else:
+                _log.warning(
+                    "StockX search: timed out. "
+                    "Try STOCKX_PROXY / HTTPS_PROXY (residential proxy often required)."
+                )
+            return None
+
+        card = page.locator('[data-testid="product-card"]').first
+        card_text = await card.inner_text()
+        href = await _first_product_href_from_card(card)
+        if href:
+            pdp_url = urljoin(BASE_ORIGIN, href)
+            await _goto_and_settle(page, pdp_url)
+            page_text = await page.locator("body").inner_text()
+            pdp_price = _parse_price_from_text(page_text)
+            if pdp_price is not None:
+                return pdp_price
+
+        return _parse_price_from_text(card_text)
+    finally:
+        await browser.close()
+
+
 async def get_resell_estimate(product_name: str) -> float | None:
+    """
+    Estimate resell from StockX search (first result). Results are cached in memory
+    per normalized product name to avoid repeated browser work during a pipeline run.
+    """
+    key = _resell_cache_key(product_name)
+    if not key:
+        return None
+
+    now = time.monotonic()
+    if key in _RESELL_ESTIMATE_CACHE:
+        cached_val, exp = _RESELL_ESTIMATE_CACHE[key]
+        if now < exp:
+            _log.debug("StockX resell cache hit for %r", key[:80])
+            return cached_val
+
+    price: float | None = None
     try:
         async with async_playwright() as p:
-            browser, page = await _new_stockx_page(p)
-            try:
-                q = quote(product_name, safe="")
-                search_url = f"{BASE_ORIGIN}/search?s={q}"
-                await _goto_and_settle(page, search_url)
-                try:
-                    await page.wait_for_selector(
-                        '[data-testid="product-card"]', timeout=15_000
-                    )
-                except PlaywrightTimeoutError:
-                    if await _cloudflare_challenge(page):
-                        print(
-                            "StockX search: Cloudflare in headless mode. "
-                            "Optional: STOCKX_DEBUG_BROWSER=1 (opens a window)."
-                        )
-                    else:
-                        print(
-                            "StockX search: timed out. "
-                            "Try STOCKX_PROXY / HTTPS_PROXY (residential proxy often required)."
-                        )
-                    return None
-
-                card = page.locator('[data-testid="product-card"]').first
-                text = await card.inner_text()
-                return _parse_price_from_text(text)
-            finally:
-                await browser.close()
+            price = await _fetch_resell_price_playwright(p, product_name)
     except Exception as e:
-        print(e)
-        return None
+        _log.warning("get_resell_estimate: %s", e)
+
+    ttl = _RESELL_TTL_HIT_S if price is not None else _RESELL_TTL_MISS_S
+    _RESELL_ESTIMATE_CACHE[key] = (price, now + ttl)
+    _maybe_trim_resell_cache()
+    return price
 
 
 if __name__ == "__main__":

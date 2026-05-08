@@ -58,6 +58,19 @@ def insert_drop(drop: dict) -> Optional[int]:
             return int(row[0]) if row else None
 
 
+def update_drop_resell_estimate(drop_id: int, resell_price: float) -> None:
+    """Updates the resell_estimate column on a drop row."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "ALTER TABLE drops ADD COLUMN IF NOT EXISTS resell_estimate NUMERIC(10,2)"
+            )
+            cur.execute(
+                "UPDATE drops SET resell_estimate = %s WHERE id = %s",
+                (resell_price, drop_id),
+            )
+
+
 def get_subscribers_for_brand(brand: str) -> list[dict]:
     """
     Queries subscribers WHERE active=TRUE AND brand_prefs @> ARRAY[brand]
