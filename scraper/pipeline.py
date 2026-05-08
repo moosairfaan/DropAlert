@@ -79,7 +79,7 @@ async def run_pipeline() -> dict:
 async def send_alerts_for_drop(drop_id: int, drop: dict) -> int:
     """Sends SMS and email alerts to all eligible subscribers. Returns count of alerts sent."""
     from alerts.sms import send_sms
-    from alerts.email import send_email
+    from alerts.resend_alerts import send_email
 
     count = 0
     subscribers = get_subscribers_for_brand(drop["brand"])
