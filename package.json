@@ -1,7 +1,7 @@
 {
   "name": "dropalert",
   "private": true,
-  "description": "Monorepo root. The Next.js app and package-lock live in ./frontend — see vercel.json.",
+  "description": "Vercel: leave Root Directory empty (repo root). Do not set Root Directory to frontend while using root vercel.json (paths would break).",
   "dependencies": {
     "next": "16.2.6",
     "react": "19.2.4",
