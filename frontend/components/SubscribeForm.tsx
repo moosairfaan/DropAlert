@@ -15,7 +15,6 @@ function labelForValue(value: string): string {
 }
 
 export function SubscribeForm() {
-  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [brandPrefs, setBrandPrefs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -32,8 +31,8 @@ export function SubscribeForm() {
     e.preventDefault();
     setError(null);
 
-    if (!phone.trim() && !email.trim()) {
-      setError("Enter at least a phone number or email.");
+    if (!email.trim()) {
+      setError("Enter your email address.");
       return;
     }
     if (brandPrefs.length === 0) {
@@ -47,8 +46,7 @@ export function SubscribeForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phone: phone.trim() || "",
-          email: email.trim() || "",
+          email: email.trim(),
           brandPrefs,
         }),
       });
@@ -73,15 +71,14 @@ export function SubscribeForm() {
     }
   }
 
-  const submitDisabled =
-    loading || (!phone.trim() && !email.trim());
+  const submitDisabled = loading || !email.trim();
 
   if (success) {
     const list = brandPrefs.map(labelForValue).join(", ");
     return (
       <div className="mx-auto max-w-lg rounded-xl bg-[#1a1a1a] p-6 ring-1 ring-zinc-800 sm:p-8">
         <p className="text-center text-lg font-medium leading-relaxed text-green-400">
-          ✅ You&apos;re subscribed! You&apos;ll get alerts for: {list}
+          ✅ You&apos;re subscribed! You&apos;ll get email alerts for: {list}
         </p>
       </div>
     );
@@ -90,32 +87,21 @@ export function SubscribeForm() {
   return (
     <div className="mx-auto max-w-lg rounded-xl bg-[#1a1a1a] p-6 ring-1 ring-zinc-800 sm:p-8">
       <form onSubmit={onSubmit} className="flex flex-col gap-6">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-zinc-400">Phone</span>
-            <input
-              type="tel"
-              autoComplete="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+1 (555) 000-0000"
-              className="rounded-lg border border-zinc-700 bg-[#111] px-3 py-2.5 text-white placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm">
-            <span className="text-zinc-400">Email</span>
-            <input
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
-              className="rounded-lg border border-zinc-700 bg-[#111] px-3 py-2.5 text-white placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </label>
-        </div>
-        <p className="-mt-2 text-xs text-zinc-500">
-          Enter at least one. SMS has 98% open rate.
+        <label className="flex flex-col gap-2 text-sm">
+          <span className="font-medium text-zinc-300">Email address</span>
+          <input
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="w-full rounded-lg border border-zinc-700 bg-[#111] px-3 py-3 text-white placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </label>
+        <p className="text-xs text-zinc-500">
+          One field — email only. Alerts are sent when we detect a new drop for
+          your brands.
         </p>
 
         <div>
@@ -154,7 +140,7 @@ export function SubscribeForm() {
               <span>Subscribing...</span>
             </>
           ) : (
-            "Start Getting Alerts"
+            "Start Getting Email Alerts"
           )}
         </button>
 

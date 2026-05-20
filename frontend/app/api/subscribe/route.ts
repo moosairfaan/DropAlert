@@ -14,16 +14,13 @@ function pgErrCode(err: unknown): string | undefined {
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as {
-    phone?: unknown;
     email?: unknown;
     brandPrefs?: unknown;
     brand_prefs?: unknown;
   };
 
-  const phone =
-    typeof body.phone === "string" ? body.phone.trim() : "";
   const email =
-    typeof body.email === "string" ? body.email.trim() : "";
+    typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
 
   const rawPrefs = Array.isArray(body.brandPrefs)
     ? body.brandPrefs
@@ -31,42 +28,25 @@ export async function POST(req: NextRequest) {
       ? body.brand_prefs
       : [];
 
-  // VALIDATION
-
-  // 1. Must have at least phone or email
-  if (!phone && !email) {
+  if (!email) {
     return NextResponse.json(
-      { error: "Please enter a phone number or email address." },
+      { error: "Please enter your email address." },
       { status: 400 }
     );
   }
 
-  // 2. Validate phone format (E.164: starts with +, then digits only, 8-15 chars total)
-  if (phone) {
-    const phoneRegex = /^\+[1-9]\d{7,14}$/;
-    if (!phoneRegex.test(phone)) {
-      return NextResponse.json(
-        { error: "Phone must be in E.164 format: +12125551234" },
-        { status: 400 }
-      );
-    }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return NextResponse.json(
+      { error: "Please enter a valid email address." },
+      { status: 400 }
+    );
   }
 
-  // 3. Validate email format
-  if (email) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { error: "Please enter a valid email address." },
-        { status: 400 }
-      );
-    }
-  }
-
-  // 4. Validate brandPrefs
   const prefs: string[] = rawPrefs.filter(
     (b): b is string =>
-      typeof b === "string" && VALID_BRANDS.includes(b as (typeof VALID_BRANDS)[number])
+      typeof b === "string" &&
+      VALID_BRANDS.includes(b as (typeof VALID_BRANDS)[number])
   );
 
   if (prefs.length === 0) {
@@ -76,26 +56,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // INSERT SUBSCRIBER
   try {
     await pool.query(
       `
-      INSERT INTO subscribers (phone, email, brand_prefs, active)
-      VALUES ($1, $2, $3::text[], true)
-      ON CONFLICT (phone) DO UPDATE SET
+      INSERT INTO subscribers (email, brand_prefs, active)
+      VALUES ($1, $2::text[], true)
+      ON CONFLICT (email) DO UPDATE SET
         brand_prefs = EXCLUDED.brand_prefs,
         active = true
       `,
-      [phone || null, email || null, prefs]
+      [email, prefs]
     );
 
     return NextResponse.json({ success: true, brands: prefs }, { status: 200 });
   } catch (err: unknown) {
-    // Handle unique constraint on email if it conflicts
     if (pgErrCode(err) === "23505") {
       await pool.query(
-        "UPDATE subscribers SET brand_prefs = $1::text[], active = true WHERE email = $2 OR phone = $3",
-        [prefs, email || null, phone || null]
+        "UPDATE subscribers SET brand_prefs = $1::text[], active = true WHERE email = $2",
+        [prefs, email]
       );
       return NextResponse.json({ success: true, brands: prefs }, { status: 200 });
     }

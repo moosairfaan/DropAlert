@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "DropAlert — Streetwear drop tracker",
   description:
-    "Never miss a Supreme, Nike, or StockX drop. Alerts by SMS and email.",
+    "Never miss a Supreme, Nike, or StockX drop. Email drop alerts.",
 };
 
 export default function RootLayout({

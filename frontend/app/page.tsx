@@ -119,7 +119,8 @@ export default async function Home() {
             🔔 DropAlert
           </h1>
           <p className="mx-auto mt-3 max-w-xl text-lg text-zinc-400">
-            Never miss a Supreme, Nike, or StockX drop again.
+            Free email alerts for Supreme, Nike SNKRS, and StockX — no phone
+            number required.
           </p>
 
           <div className="mx-auto mt-8 flex max-w-2xl flex-wrap items-center justify-center gap-3 text-sm">
@@ -141,7 +142,7 @@ export default async function Home() {
               href="#subscribe"
               className="inline-block rounded-lg bg-blue-600 px-8 py-3 font-semibold text-white shadow-lg shadow-blue-900/30 transition hover:bg-blue-500"
             >
-              Get Drop Alerts
+              Get Email Alerts
             </a>
           </div>
         </header>
@@ -215,9 +216,13 @@ export default async function Home() {
           id="subscribe"
           className="scroll-mt-8 rounded-2xl bg-[#111] px-4 py-14 ring-1 ring-zinc-800 sm:px-8"
         >
-          <h2 className="mb-8 text-center text-2xl font-bold sm:text-3xl">
-            Get Drop Alerts — Before They Sell Out
+          <h2 className="mb-2 text-center text-2xl font-bold sm:text-3xl">
+            Get Email Alerts — Before They Sell Out
           </h2>
+          <p className="mb-8 text-center text-sm text-zinc-500">
+            Enter your email and pick the brands you want. We only send email —
+            no SMS.
+          </p>
           <SubscribeForm />
         </section>
 
