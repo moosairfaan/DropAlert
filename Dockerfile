@@ -1,4 +1,4 @@
-# Railway: set service Root Directory to `scraper`, or use repo-root Dockerfile.
+# Monorepo Railway build when Root Directory is the repo root (not `scraper/`).
 FROM mcr.microsoft.com/playwright/python:v1.59.0-noble
 
 WORKDIR /app
@@ -6,9 +6,9 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-COPY requirements.txt .
+COPY scraper/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY scraper/ .
 
 CMD ["python", "scheduler.py"]
