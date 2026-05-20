@@ -87,22 +87,12 @@ async def run_pipeline() -> dict:
 
 
 async def send_alerts_for_drop(drop_id: int, drop: dict) -> int:
-    """Sends SMS and email alerts to all eligible subscribers. Returns count of alerts sent."""
-    from alerts.sms import send_sms
+    """Sends email alerts to eligible subscribers. Returns count of alerts sent."""
     from alerts.resend_alerts import send_email
 
     count = 0
     subscribers = get_subscribers_for_brand(drop["brand"])
     for sub in subscribers:
-        # SMS alert
-        if sub.get("phone") and not has_alert_been_sent(drop_id, sub["id"], "sms"):
-            try:
-                send_sms(sub["phone"], drop)
-                log_alert_sent(drop_id, sub["id"], "sms")
-                count += 1
-            except Exception as e:
-                log.error(f'SMS failed for subscriber {sub["id"]}: {e}')
-
         # Email alert
         if sub.get("email") and not has_alert_been_sent(drop_id, sub["id"], "email"):
             try:
