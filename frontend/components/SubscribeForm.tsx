@@ -41,27 +41,32 @@ export function SubscribeForm() {
         }),
       });
 
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        detail?: string;
+      };
 
-      if (res.status === 200) {
+      if (res.ok) {
         setSuccess(true);
         return;
       }
 
-      if (res.status === 400) {
-        setError(data.error ?? "Invalid request.");
-        return;
-      }
-
-      setError(data.error ?? "Something went wrong.");
+      const msg =
+        data.error ??
+        data.detail ??
+        `Request failed (${res.status}). Check your connection and try again.`;
+      setError(msg);
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError(
+        "Could not reach the server. If you're testing locally, run npm run dev from the frontend folder."
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  const submitDisabled = loading || !email.trim();
+  const submitDisabled =
+    loading || !email.trim() || brandPrefs.length === 0;
 
   if (success) {
     const list = brandPrefs.map(labelForBrand).join(", ");
