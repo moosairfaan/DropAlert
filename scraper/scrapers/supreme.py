@@ -6,8 +6,10 @@ from playwright.async_api import Locator, async_playwright
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 
+from scrapers._common import filter_shoe_drops, is_shoe_drop
+
 BASE_URL = "https://www.supremenewyork.com"
-SHOP_ALL_URL = f"{BASE_URL}/shop/all"
+SHOES_URL = f"{BASE_URL}/shop/shoes"
 MAX_ITEMS = 20
 
 
@@ -72,7 +74,7 @@ async def _extract_product(card: Locator, page_url: str) -> dict | None:
         return None
     product_url = urljoin(page_url, href)
 
-    return {
+    drop = {
         "brand": "Supreme",
         "name": name,
         "price": price,
@@ -80,6 +82,9 @@ async def _extract_product(card: Locator, page_url: str) -> dict | None:
         "product_url": product_url,
         "drop_date": None,
     }
+    if not is_shoe_drop(drop):
+        return None
+    return drop
 
 
 async def scrape_supreme() -> list[dict]:
@@ -88,7 +93,7 @@ async def scrape_supreme() -> list[dict]:
             browser = await p.chromium.launch(headless=True)
             try:
                 page = await browser.new_page()
-                await page.goto(SHOP_ALL_URL)
+                await page.goto(SHOES_URL)
                 await page.wait_for_load_state("networkidle")
 
                 try:
@@ -109,7 +114,7 @@ async def scrape_supreme() -> list[dict]:
                     item = await _extract_product(cards.nth(i), page_url)
                     if item:
                         results.append(item)
-                return results
+                return filter_shoe_drops(results)
             finally:
                 await browser.close()
     except Exception as e:

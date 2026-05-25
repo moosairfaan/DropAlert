@@ -226,10 +226,12 @@ export default async function Home() {
             <span className="font-serif italic">Moosa Irfaan</span>
           </p>
           <Link
-            href="https://github.com/moosairfaan/DropAlert"
+            href="https://moosairfaan.dev"
+            target="_blank"
+            rel="noopener noreferrer"
             className="font-extrabold text-[#2d5bff] underline-offset-4 hover:text-[#ff2d6f] hover:underline"
           >
-            GitHub
+            moosairfaan.dev
           </Link>
         </footer>
       </div>

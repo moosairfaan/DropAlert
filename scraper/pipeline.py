@@ -21,6 +21,7 @@ from db import (
     get_stats,
 )
 from redis_client import is_already_alerted, mark_as_alerted
+from scrapers._common import filter_shoe_drops
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -68,6 +69,12 @@ async def run_pipeline() -> dict:
         if err:
             summary["errors"].append(err)
         results.extend(drops)
+
+    before = len(results)
+    results = filter_shoe_drops(results)
+    skipped = before - len(results)
+    if skipped:
+        log.info("Filtered %d non-shoe / promo items", skipped)
 
     for drop in results:
         brand = drop["brand"]

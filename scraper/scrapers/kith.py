@@ -6,14 +6,7 @@ FOOTWEAR_URL = "https://kith.com/collections/mens-footwear"
 
 
 async def scrape_kith() -> list[dict]:
-    rows = await scrape_shopify_products(FOOTWEAR_URL, "Kith", max_items=MAX_ITEMS)
-    if rows:
-        return rows
-    return await scrape_shopify_products(
-        "https://kith.com/collections/new",
-        "Kith",
-        max_items=MAX_ITEMS,
-    )
+    return await scrape_shopify_products(FOOTWEAR_URL, "Kith", max_items=MAX_ITEMS)
 
 
 if __name__ == "__main__":

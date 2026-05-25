@@ -7,6 +7,8 @@ from urllib.parse import urljoin, urlparse
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
+from scrapers._common import filter_shoe_drops
+
 
 LAUNCH_URL = "https://www.nike.com/launch"
 MAX_ITEMS = 15
@@ -354,7 +356,7 @@ async def fetch_nike_launch() -> list[dict]:
 
 async def scrape_nike() -> list[dict]:
     rows = await fetch_nike_launch()
-    return [d for d in rows if not is_jordan_drop(d)]
+    return filter_shoe_drops([d for d in rows if not is_jordan_drop(d)])
 
 
 if __name__ == "__main__":

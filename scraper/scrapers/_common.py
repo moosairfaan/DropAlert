@@ -15,6 +15,109 @@ DEFAULT_UA = (
 )
 MAX_ITEMS = 15
 
+# Marketing / nav copy that slips in when link patterns are too broad
+_JUNK_NAME_RE = re.compile(
+    r"(?i)\b("
+    r"refer\s*a\s*friend|join\s*the\s*celebration|store\s*locator|find\s*a\s*store|"
+    r"gift\s*card|newsletter|sign\s*up|log\s*in|customer\s*service|contact\s*us|"
+    r"about\s*us|privacy\s*policy|terms\s*of|cookie\s*settings|rewards?\s*program|"
+    r"membership|shipping\s*(&|and)\s*returns?|track\s*(my\s*)?order|wish\s*list|"
+    r"shopping\s*bag|subscribe|careers|blog|help\s*center|faq|create\s*account|"
+    r"my\s*account|order\s*history|exclusive\s*access|download\s*the\s*app|"
+    r"get\s*10\s*%|promo\s*code|student\s*discount|military\s*discount"
+    r")\b"
+)
+
+_JUNK_URL_FRAGMENTS = (
+    "/refer",
+    "/celebration",
+    "/store-locator",
+    "/storelocator",
+    "/gift-card",
+    "/newsletter",
+    "/login",
+    "/signup",
+    "/sign-up",
+    "/account",
+    "/help",
+    "/about",
+    "/contact",
+    "/privacy",
+    "/terms",
+    "/legal",
+    "/rewards",
+    "/membership",
+    "/blog",
+    "/careers",
+    "/faq",
+    "/customer-service",
+    "/track-order",
+    "/wishlist",
+    "/cart",
+    "/checkout",
+)
+
+_PRODUCT_URL_HINTS = (
+    "/product",
+    "/products/",
+    "/pd/",
+    "/launch/t/",
+    "/release-dates/",
+    "/footwear",
+    "/sneaker",
+    "/shoes",
+)
+
+_SHOE_SIGNAL_RE = re.compile(
+    r"(?i)\b("
+    r"sneaker|sneakers|shoe|shoes|footwear|runner|running|runners|trainer|trainers|"
+    r"boot|boots|slide|slides|sandal|cleat|skate\s*shoe|basketball\s*shoe|"
+    r"gel[\s-]|air\s*max|air\s*force|air\s*jordan|dunk|yeezy|foamposite|"
+    r"pegasus|vaporfly|ultraboost|samba|gazelle|campus|superstar|"
+    r"new\s*balance|990|991|992|993|2002r|550|574|1906r|9060|"
+    r"chuck|old\s*skool|sk8|sb\s+dunk|foam\s*runner|boost\s*og"
+    r")\b"
+)
+
+_NON_SHOE_RE = re.compile(
+    r"(?i)\b("
+    r"t-?shirt|tee\b|hoodie|sweatshirt|jacket|coat|pants|trousers|shorts|"
+    r"beanie|bucket\s*hat|\bcap\b|backpack|bag\b|tote|sock\b|underwear|"
+    r"gloves|scarf|denim|shirt\b|polo\b|keychain|sticker|deck\b|"
+    r"water\s*bottle|mug\b|towel|blanket|pillow|hat\b"
+    r")\b"
+)
+
+
+def is_shoe_drop(drop: dict) -> bool:
+    """True when name/URL look like footwear, not site promos or apparel."""
+    name = (drop.get("name") or "").strip()
+    url = (drop.get("product_url") or "").strip()
+    if len(name) < 3 or not url:
+        return False
+    if _JUNK_NAME_RE.search(name):
+        return False
+    lower_url = url.lower()
+    if any(j in lower_url for j in _JUNK_URL_FRAGMENTS):
+        return False
+    blob = f"{name} {url}"
+    if _NON_SHOE_RE.search(blob):
+        return False
+    if _SHOE_SIGNAL_RE.search(blob):
+        return True
+    if not any(h in lower_url for h in _PRODUCT_URL_HINTS):
+        return False
+    # Product PDP with a price — likely real merch; still exclude if name is promo-y
+    if drop.get("price") is not None and not _JUNK_NAME_RE.search(name):
+        slug = lower_url.rstrip("/").split("/")[-1]
+        if slug and slug not in ("en", "us", "en-us", "shop", "collections"):
+            return True
+    return False
+
+
+def filter_shoe_drops(drops: list[dict]) -> list[dict]:
+    return [d for d in drops if is_shoe_drop(d)]
+
 
 def parse_price(text: str) -> float | None:
     if not text:
@@ -120,7 +223,7 @@ async def scrape_shopify_products(url: str, brand: str, max_items: int = MAX_ITE
                     )
                     if len(results) >= max_items:
                         break
-                return results
+                return filter_shoe_drops(results)
             finally:
                 await browser.close()
     except Exception as e:
@@ -135,6 +238,7 @@ async def scrape_link_grid(
     link_pattern: str,
     max_items: int = MAX_ITEMS,
     name_min_len: int = 3,
+    require_product_url: bool = True,
 ) -> list[dict]:
     """Generic product grid: find anchors matching link_pattern (substring)."""
     try:
@@ -170,6 +274,13 @@ async def scrape_link_grid(
                     product_url = urljoin(page_url, href)
                     if product_url in seen_urls:
                         continue
+                    lower_url = product_url.lower()
+                    if require_product_url and not any(
+                        h in lower_url for h in _PRODUCT_URL_HINTS
+                    ):
+                        continue
+                    if any(j in lower_url for j in _JUNK_URL_FRAGMENTS):
+                        continue
                     seen_urls.add(product_url)
 
                     card = link.locator(
@@ -193,6 +304,8 @@ async def scrape_link_grid(
                         name = (await link.inner_text()).strip().split("\n")[0].strip()
                     if len(name) < name_min_len:
                         continue
+                    if _JUNK_NAME_RE.search(name):
+                        continue
 
                     price = parse_price(await card.inner_text())
                     image_url = None
@@ -202,16 +315,16 @@ async def scrape_link_grid(
                         if image_url and image_url.startswith("//"):
                             image_url = "https:" + image_url
 
-                    results.append(
-                        make_drop(
-                            brand=brand,
-                            name=name,
-                            price=price,
-                            image_url=image_url,
-                            product_url=product_url,
-                        )
+                    candidate = make_drop(
+                        brand=brand,
+                        name=name,
+                        price=price,
+                        image_url=image_url,
+                        product_url=product_url,
                     )
-                return results
+                    if is_shoe_drop(candidate):
+                        results.append(candidate)
+                return results[:max_items]
             finally:
                 await browser.close()
     except Exception as e:

@@ -6,16 +6,13 @@ RELEASE_URL = "https://www.adidas.com/us/release-dates"
 
 
 async def scrape_adidas() -> list[dict]:
-    for pattern in ("/release-dates/", "/us/", "/product/"):
-        rows = await scrape_link_grid(
-            RELEASE_URL,
-            "Adidas",
-            link_pattern=pattern,
-            max_items=MAX_ITEMS,
-        )
-        if rows:
-            return rows
-    return []
+    return await scrape_link_grid(
+        RELEASE_URL,
+        "Adidas",
+        link_pattern="/release-dates/",
+        max_items=MAX_ITEMS,
+        require_product_url=True,
+    )
 
 
 if __name__ == "__main__":

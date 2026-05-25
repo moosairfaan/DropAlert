@@ -2,11 +2,18 @@ import asyncio
 
 from scrapers._common import MAX_ITEMS, scrape_shopify_products
 
-SHOP_URL = "https://shop-usa.palaceskateboards.com/"
+FOOTWEAR_URLS = (
+    "https://shop-usa.palaceskateboards.com/collections/footwear",
+    "https://palaceskateboards.com/collections/footwear",
+)
 
 
 async def scrape_palace() -> list[dict]:
-    return await scrape_shopify_products(SHOP_URL, "Palace", max_items=MAX_ITEMS)
+    for url in FOOTWEAR_URLS:
+        rows = await scrape_shopify_products(url, "Palace", max_items=MAX_ITEMS)
+        if rows:
+            return rows
+    return []
 
 
 if __name__ == "__main__":
