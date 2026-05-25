@@ -15,6 +15,7 @@ from scrapers.palace import scrape_palace
 from db import (
     insert_drop,
     touch_drop,
+    prune_non_shoe_drops,
     get_subscribers_for_brand,
     has_alert_been_sent,
     log_alert_sent,
@@ -58,6 +59,10 @@ async def run_pipeline() -> dict:
     """
     start = datetime.now()
     summary = {"new_drops": 0, "alerts_sent": 0, "errors": []}
+
+    removed = prune_non_shoe_drops()
+    if removed:
+        log.info("Pruned %d non-shoe / promo rows from database", removed)
 
     log.info("Starting scrape pipeline...")
     scrape_results = await asyncio.gather(

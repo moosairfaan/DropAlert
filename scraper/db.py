@@ -160,6 +160,28 @@ def get_upcoming_drops(limit: int = 50) -> list[dict]:
             return [dict(r) for r in rows]
 
 
+def prune_non_shoe_drops() -> int:
+    """Delete drops that fail shoe/promo filters (cleans old bad rows)."""
+    from scrapers._common import is_shoe_drop
+
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, brand, name, price, image_url, product_url FROM drops"
+            )
+            rows = cur.fetchall()
+
+        to_delete = [int(r["id"]) for r in rows if not is_shoe_drop(dict(r))]
+        if not to_delete:
+            return 0
+
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM alerts_sent WHERE drop_id = ANY(%s)", (to_delete,))
+            cur.execute("DELETE FROM drops WHERE id = ANY(%s)", (to_delete,))
+        conn.commit()
+        return len(to_delete)
+
+
 def get_stats() -> dict[str, Any]:
     """
     Returns: {subscriber_count, alerts_sent, drops_tracked}

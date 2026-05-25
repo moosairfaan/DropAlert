@@ -15,7 +15,7 @@ DEFAULT_UA = (
 )
 MAX_ITEMS = 15
 
-# Marketing / nav copy that slips in when link patterns are too broad
+# Marketing / nav / site pages — not product drops
 _JUNK_NAME_RE = re.compile(
     r"(?i)\b("
     r"refer\s*a\s*friend|join\s*the\s*celebration|store\s*locator|find\s*a\s*store|"
@@ -24,8 +24,23 @@ _JUNK_NAME_RE = re.compile(
     r"membership|shipping\s*(&|and)\s*returns?|track\s*(my\s*)?order|wish\s*list|"
     r"shopping\s*bag|subscribe|careers|blog|help\s*center|faq|create\s*account|"
     r"my\s*account|order\s*history|exclusive\s*access|download\s*the\s*app|"
-    r"get\s*10\s*%|promo\s*code|student\s*discount|military\s*discount"
+    r"get\s*10\s*%|promo\s*code|student\s*discount|military\s*discount|"
+    r"road\s*tested|road-tested|\bbenefits?\b|loyalty|one\s*asics|asics\s*benefits|"
+    r"size\s*guide|fit\s*guide|our\s*story|sustainability|partners?|order\s*status|"
+    r"live\s*chat|warranty|repair\s*service|click\s*and\s*collect|gift\s*with\s*purchase|"
+    r"learn\s*more|discover\s*more|explore\s*more|shop\s*now\s*for|join\s*us|"
+    r"become\s*a\s*member|vip\s*access|early\s*access\s*program|"
+    r"free\s*shipping|return\s*policy|store\s*finder|book\s*appointment|"
+    r"^contact$|^benefits$|^rewards$|^loyalty$|^newsletter$|^membership$|^sustainability$"
     r")\b"
+)
+
+_JUNK_SLUG_RE = re.compile(
+    r"(?i)(refer|friend|celebration|benefits|loyalty|rewards|contact|locator|"
+    r"newsletter|account|login|signup|privacy|terms|help|faq|careers|blog|"
+    r"shipping|returns|gift-card|giftcard|road-tested|roadtested|programs?|"
+    r"membership|sustainability|partners|warranty|repair|size-guide|fit-guide|"
+    r"order-status|live-chat|student-discount|military-discount|one-asics)"
 )
 
 _JUNK_URL_FRAGMENTS = (
@@ -81,24 +96,63 @@ _SHOE_SIGNAL_RE = re.compile(
 
 _NON_SHOE_RE = re.compile(
     r"(?i)\b("
-    r"t-?shirt|tee\b|hoodie|sweatshirt|jacket|coat|pants|trousers|shorts|"
-    r"beanie|bucket\s*hat|\bcap\b|backpack|bag\b|tote|sock\b|underwear|"
-    r"gloves|scarf|denim|shirt\b|polo\b|keychain|sticker|deck\b|"
-    r"water\s*bottle|mug\b|towel|blanket|pillow|hat\b"
+    r"t-?shirt|tee\b|hoodie|sweatshirt|jacket|coat|puffer|varsity|avirex|"
+    r"reversible|leather|denim|crewneck|fleece|pants|trousers|shorts|"
+    r"beanie|bucket\s*hat|\bcap\b|backpack|tote|sock\b|underwear|"
+    r"gloves|scarf|shirt\b|polo\b|keychain|sticker|deck\b|skateboard\b|"
+    r"water\s*bottle|mug\b|towel|blanket|pillow|hat\b|sunglasses|eyewear|"
+    r"watch\b|wallet|belt\b|cargo\s*pant|sweater|cardigan|blazer|vest\b|"
+    r"skirt|dress\b|bikini|swimwear|legging|bra\b"
     r")\b"
 )
+
+_GENERIC_SLUGS = frozenset(
+    {
+        "en",
+        "us",
+        "en-us",
+        "shop",
+        "collections",
+        "products",
+        "product",
+        "release-dates",
+        "launch-calendar",
+    }
+)
+
+
+def _url_slug(url: str) -> str:
+    slug = url.rstrip("/").split("/")[-1].lower()
+    if "?" in slug:
+        slug = slug.split("?")[0]
+    return slug
+
+
+def _slug_looks_like_product(slug: str) -> bool:
+    if not slug or slug in _GENERIC_SLUGS or len(slug) < 5:
+        return False
+    if _JUNK_SLUG_RE.search(slug):
+        return False
+    if re.search(r"\d", slug):
+        return True
+    if slug.count("-") >= 2 and len(slug) >= 12:
+        return True
+    return False
 
 
 def is_shoe_drop(drop: dict) -> bool:
     """True when name/URL look like footwear, not site promos or apparel."""
     name = (drop.get("name") or "").strip()
     url = (drop.get("product_url") or "").strip()
-    if len(name) < 3 or not url:
+    if len(name) < 4 or not url:
         return False
     if _JUNK_NAME_RE.search(name):
         return False
     lower_url = url.lower()
     if any(j in lower_url for j in _JUNK_URL_FRAGMENTS):
+        return False
+    slug = _url_slug(url)
+    if slug and _JUNK_SLUG_RE.search(slug):
         return False
     blob = f"{name} {url}"
     if _NON_SHOE_RE.search(blob):
@@ -107,11 +161,8 @@ def is_shoe_drop(drop: dict) -> bool:
         return True
     if not any(h in lower_url for h in _PRODUCT_URL_HINTS):
         return False
-    # Product PDP with a price — likely real merch; still exclude if name is promo-y
-    if drop.get("price") is not None and not _JUNK_NAME_RE.search(name):
-        slug = lower_url.rstrip("/").split("/")[-1]
-        if slug and slug not in ("en", "us", "en-us", "shop", "collections"):
-            return True
+    if _slug_looks_like_product(slug) and len(name) >= 6:
+        return True
     return False
 
 

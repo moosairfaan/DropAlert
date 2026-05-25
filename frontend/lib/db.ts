@@ -1,5 +1,7 @@
 import { Pool } from "pg";
 
+import { filterShoeDrops } from "@/lib/shoeFilter";
+
 declare global {
   // eslint-disable-next-line no-var -- required for global singleton pattern in Next.js
   var pgPool: Pool | undefined;
@@ -45,9 +47,9 @@ export async function getDrops(limit = 50) {
      FROM drops
      ORDER BY scraped_at DESC
      LIMIT $1`,
-    [limit]
+    [limit * 3]
   );
-  return rows;
+  return filterShoeDrops(rows).slice(0, limit);
 }
 
 export async function getStats() {
