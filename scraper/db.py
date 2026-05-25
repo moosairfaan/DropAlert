@@ -1,4 +1,5 @@
 import os
+import secrets
 from typing import Any, Optional
 
 import psycopg2
@@ -84,13 +85,50 @@ def touch_drop(drop: dict) -> None:
             )
 
 
+def ensure_subscriber_schema() -> None:
+    """Add per-subscriber unsubscribe_token (unique) if missing."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                ALTER TABLE subscribers
+                ADD COLUMN IF NOT EXISTS unsubscribe_token TEXT
+                """
+            )
+            cur.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS subscribers_unsubscribe_token_idx
+                ON subscribers (unsubscribe_token)
+                WHERE unsubscribe_token IS NOT NULL
+                """
+            )
+            cur.execute(
+                """
+                SELECT id FROM subscribers
+                WHERE unsubscribe_token IS NULL AND email IS NOT NULL
+                """
+            )
+            missing = cur.fetchall()
+            for (sub_id,) in missing:
+                cur.execute(
+                    """
+                    UPDATE subscribers
+                    SET unsubscribe_token = %s
+                    WHERE id = %s
+                    """,
+                    (secrets.token_urlsafe(32), sub_id),
+                )
+        conn.commit()
+
+
 def get_subscribers_for_brand(brand: str) -> list[dict]:
     """
     Queries subscribers WHERE active=TRUE AND brand_prefs @> ARRAY[brand]
-    Returns list of dicts with keys: id, email
+    Returns list of dicts with keys: id, email, unsubscribe_token
     """
+    ensure_subscriber_schema()
     sql = """
-        SELECT id, email
+        SELECT id, email, unsubscribe_token
         FROM subscribers
         WHERE active = TRUE
           AND email IS NOT NULL

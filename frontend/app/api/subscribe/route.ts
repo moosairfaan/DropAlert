@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import pool from "@/lib/db";
 import { BRANDS } from "@/lib/brands";
+import {
+  ensureSubscriberSchema,
+  newUnsubscribeToken,
+} from "@/lib/subscribers";
 import { sendWelcomeEmail } from "@/lib/welcomeEmail";
 
 const VALID_BRANDS = BRANDS;
@@ -87,31 +91,50 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    await ensureSubscriberSchema();
+    const token = newUnsubscribeToken();
+
     try {
       await pool.query(
         `
-        INSERT INTO subscribers (email, brand_prefs, active)
-        VALUES ($1, $2::text[], true)
+        INSERT INTO subscribers (email, brand_prefs, active, unsubscribe_token)
+        VALUES ($1, $2::text[], true, $3)
         ON CONFLICT (email) DO UPDATE SET
           brand_prefs = EXCLUDED.brand_prefs,
-          active = true
+          active = true,
+          unsubscribe_token = COALESCE(
+            subscribers.unsubscribe_token,
+            EXCLUDED.unsubscribe_token
+          )
         `,
-        [email, prefs]
+        [email, prefs, token]
       );
     } catch (err: unknown) {
       if (pgErrCode(err) === "23505") {
         await pool.query(
-          "UPDATE subscribers SET brand_prefs = $1::text[], active = true WHERE email = $2",
-          [prefs, email]
+          `
+          UPDATE subscribers
+          SET brand_prefs = $1::text[],
+              active = true,
+              unsubscribe_token = COALESCE(unsubscribe_token, $3)
+          WHERE email = $2
+          `,
+          [prefs, email, token]
         );
       } else {
         throw err;
       }
     }
 
+    const { rows } = await pool.query<{ unsubscribe_token: string }>(
+      `SELECT unsubscribe_token FROM subscribers WHERE LOWER(email) = LOWER($1)`,
+      [email]
+    );
+    const unsubscribeToken = rows[0]?.unsubscribe_token ?? token;
+
     let welcomeEmailSent = false;
     try {
-      await sendWelcomeEmail(email, prefs);
+      await sendWelcomeEmail(email, prefs, unsubscribeToken);
       welcomeEmailSent = true;
     } catch (emailErr: unknown) {
       console.error("Welcome email failed:", emailErr);

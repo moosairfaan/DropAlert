@@ -1,53 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import pool from "@/lib/db";
+import {
+  ensureSubscriberSchema,
+  unsubscribeByEmail,
+  unsubscribeByToken,
+} from "@/lib/subscribers";
 
-async function unsubscribeEmail(email: string): Promise<boolean> {
-  const { rowCount } = await pool.query(
-    "UPDATE subscribers SET active = false WHERE LOWER(email) = LOWER($1)",
-    [email]
-  );
-  return (rowCount ?? 0) > 0;
-}
+export const dynamic = "force-dynamic";
 
-function htmlResponse(message: string, status = 200) {
-  return new NextResponse(
-    `<!DOCTYPE html><html lang="en"><body style="font-family:system-ui,sans-serif;max-width:480px;margin:40px auto;padding:24px;color:#111"><p>${message}</p></body></html>`,
-    {
-      status,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    }
+function redirectToPage(status: "confirmed" | "invalid") {
+  const base = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  return NextResponse.redirect(
+    new URL(`/unsubscribe?status=${status}`, base.replace(/\/$/, ""))
   );
 }
 
-/** GET /api/unsubscribe?email=... — link in email footer */
+/** GET — token (redirect to page) or legacy ?email= */
 export async function GET(req: NextRequest) {
+  const token = (req.nextUrl.searchParams.get("token") || "").trim();
   const email = (req.nextUrl.searchParams.get("email") || "").trim();
-  if (!email) {
-    return htmlResponse("Missing email parameter.", 400);
-  }
+
   try {
-    const found = await unsubscribeEmail(email);
-    if (!found) {
-      return htmlResponse(
-        "No active subscription found for that email address."
-      );
+    await ensureSubscriberSchema();
+
+    if (token) {
+      const ok = await unsubscribeByToken(token);
+      return redirectToPage(ok ? "confirmed" : "invalid");
     }
-    return htmlResponse("You have been unsubscribed from DropAlert emails.");
+
+    if (email) {
+      const found = await unsubscribeByEmail(email);
+      return redirectToPage(found ? "confirmed" : "invalid");
+    }
+
+    return NextResponse.redirect(
+      new URL("/unsubscribe", req.nextUrl.origin)
+    );
   } catch (err) {
-    console.error("Unsubscribe error:", err);
-    return htmlResponse("Something went wrong. Please try again later.", 500);
+    console.error("Unsubscribe GET error:", err);
+    return redirectToPage("invalid");
   }
 }
 
-/** POST — Gmail one-click unsubscribe (RFC 8058) */
+/** POST — Gmail one-click (RFC 8058); ?token= or ?email= */
 export async function POST(req: NextRequest) {
+  const token = (req.nextUrl.searchParams.get("token") || "").trim();
   const email = (req.nextUrl.searchParams.get("email") || "").trim();
-  if (!email) {
-    return new NextResponse(null, { status: 400 });
-  }
+
   try {
-    await unsubscribeEmail(email);
+    await ensureSubscriberSchema();
+    if (token) {
+      await unsubscribeByToken(token);
+    } else if (email) {
+      await unsubscribeByEmail(email);
+    } else {
+      return new NextResponse(null, { status: 400 });
+    }
     return new NextResponse(null, { status: 200 });
   } catch (err) {
     console.error("Unsubscribe POST error:", err);

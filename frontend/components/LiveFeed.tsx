@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CountdownTimer } from "@/components/CountdownTimer";
+import { BRAND_OPTIONS } from "@/lib/brands";
 import {
   brandBadgeClass,
   formatPrice,
@@ -10,6 +11,7 @@ import {
   scrapedAtIso,
   type DropRow,
 } from "@/lib/dropDisplay";
+import { filterDropsClient } from "@/lib/feedFilters";
 
 /** How often to pull /api/feed while the tab is open */
 const POLL_MS = 15_000;
@@ -55,8 +57,15 @@ export function LiveFeed({
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [justUpdated, setJustUpdated] = useState(false);
+  const [brandFilter, setBrandFilter] = useState<string | null>(null);
+  const [hypeOnly, setHypeOnly] = useState(false);
   const fingerprintRef = useRef(
     feedFingerprint(initialDrops, initialStats)
+  );
+
+  const visibleDrops = useMemo(
+    () => filterDropsClient(drops, { brand: brandFilter, hypeOnly }),
+    [drops, brandFilter, hypeOnly]
   );
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
@@ -161,7 +170,7 @@ export function LiveFeed({
         <h2 className="mb-2 text-center font-serif text-4xl font-bold italic text-black">
           Latest drops
         </h2>
-        <div className="mb-8 flex flex-col items-center justify-center gap-3">
+        <div className="mb-6 flex flex-col items-center justify-center gap-3">
           <p className="text-center font-sans text-sm font-bold uppercase tracking-widest text-neutral-500">
             {justUpdated ? (
               <span className="text-[#ff2d6f]">New data loaded</span>
@@ -188,6 +197,64 @@ export function LiveFeed({
           </button>
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => setBrandFilter(null)}
+            className={`rounded-lg border-4 px-3 py-2 text-xs font-extrabold uppercase transition ${
+              brandFilter === null
+                ? "border-black bg-black text-white shadow-pop-sm"
+                : "border-black bg-white text-black hover:bg-[#ffe600]"
+            }`}
+          >
+            All
+          </button>
+          {BRAND_OPTIONS.map(({ label, value, on }) => {
+            const selected = brandFilter === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setBrandFilter(value)}
+                className={`rounded-lg border-4 px-3 py-2 text-xs font-extrabold transition ${
+                  selected
+                    ? `${on} border-black shadow-pop-sm`
+                    : "border-black bg-white text-black hover:bg-[#ffe600]"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mb-8 flex justify-center">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={hypeOnly}
+            onClick={() => setHypeOnly((v) => !v)}
+            className={`flex items-center gap-3 border-4 border-black px-4 py-2.5 font-extrabold uppercase tracking-wide shadow-pop-sm transition ${
+              hypeOnly
+                ? "bg-[#ff2d6f] text-white"
+                : "bg-white text-black hover:bg-[#ffe600]"
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-10 rounded-full border-2 border-black ${
+                hypeOnly ? "bg-white" : "bg-neutral-200"
+              }`}
+            >
+              <span
+                className={`mt-0.5 block h-3.5 w-3.5 rounded-full border-2 border-black bg-black transition-transform ${
+                  hypeOnly ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+            Hype only
+          </button>
+        </div>
+
         {dbError ? (
           <div className="border-4 border-black bg-[#ff2d6f] px-4 py-3 text-center text-sm font-bold text-white shadow-pop-sm">
             {dbError}
@@ -200,9 +267,16 @@ export function LiveFeed({
           </p>
         ) : null}
 
-        {!dbError && drops.length > 0 ? (
+        {!dbError && drops.length > 0 && visibleDrops.length === 0 ? (
+          <p className="text-center font-serif text-lg italic text-neutral-600">
+            No drops match these filters. Try &quot;All&quot; or turn off Hype
+            only.
+          </p>
+        ) : null}
+
+        {!dbError && visibleDrops.length > 0 ? (
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {drops.map((drop) => (
+            {visibleDrops.map((drop) => (
               <article
                 key={drop.id}
                 className="group flex flex-col overflow-hidden border-4 border-black bg-white shadow-pop transition hover:-translate-y-1 hover:shadow-pop-lg"

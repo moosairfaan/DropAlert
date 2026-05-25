@@ -38,10 +38,15 @@ def _from_address() -> str:
     return f"DropAlert <{raw}>"
 
 
-def _unsubscribe_url(recipient_email: str) -> str:
+def _unsubscribe_page_url(token: str) -> str:
     base = _app_base_url()
-    email_q = quote(recipient_email.strip().lower())
-    return f"{base}/api/unsubscribe?email={email_q}"
+    return f"{base}/unsubscribe?token={quote(token, safe='')}"
+
+
+def _unsubscribe_api_url(token: str) -> str:
+    """RFC 8058 one-click POST target."""
+    base = _app_base_url()
+    return f"{base}/api/unsubscribe?token={quote(token, safe='')}"
 
 
 def _format_price(drop: dict) -> str:
@@ -120,7 +125,7 @@ You're receiving this because you subscribed to DropAlert. To unsubscribe, visit
     return subject, text, html
 
 
-def send_email(to_email: str, drop: dict) -> None:
+def send_email(to_email: str, drop: dict, *, unsubscribe_token: str) -> None:
     """
     Sends a transactional drop notification via Resend.
     Raises on failure — caller handles exception.
@@ -131,8 +136,9 @@ def send_email(to_email: str, drop: dict) -> None:
     resend.api_key = key
 
     recipient = to_email.strip().lower()
-    unsubscribe_url = _unsubscribe_url(recipient)
-    subject, text, html = _build_content(drop, unsubscribe_url)
+    page_url = _unsubscribe_page_url(unsubscribe_token)
+    api_url = _unsubscribe_api_url(unsubscribe_token)
+    subject, text, html = _build_content(drop, page_url)
 
     params: resend.Emails.SendParams = {
         "from": _from_address(),
@@ -141,7 +147,7 @@ def send_email(to_email: str, drop: dict) -> None:
         "text": text,
         "html": html,
         "headers": {
-            "List-Unsubscribe": f"<{unsubscribe_url}>",
+            "List-Unsubscribe": f"<{api_url}>",
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
     }

@@ -121,9 +121,14 @@ async def send_alerts_for_drop(drop_id: int, drop: dict) -> int:
     count = 0
     subscribers = get_subscribers_for_brand(drop["brand"])
     for sub in subscribers:
-        if sub.get("email") and not has_alert_been_sent(drop_id, sub["id"], "email"):
+        token = sub.get("unsubscribe_token")
+        if (
+            sub.get("email")
+            and token
+            and not has_alert_been_sent(drop_id, sub["id"], "email")
+        ):
             try:
-                send_email(sub["email"], drop)
+                send_email(sub["email"], drop, unsubscribe_token=str(token))
                 log_alert_sent(drop_id, sub["id"], "email")
                 count += 1
             except Exception as e:

@@ -14,9 +14,12 @@ function fromAddress(): string {
   return `DropAlert <${raw}>`;
 }
 
-function unsubscribeUrl(email: string): string {
-  const q = encodeURIComponent(email.trim().toLowerCase());
-  return `${appBaseUrl()}/api/unsubscribe?email=${q}`;
+function unsubscribePageUrl(token: string): string {
+  return `${appBaseUrl()}/unsubscribe?token=${encodeURIComponent(token)}`;
+}
+
+function unsubscribeApiUrl(token: string): string {
+  return `${appBaseUrl()}/api/unsubscribe?token=${encodeURIComponent(token)}`;
 }
 
 function escapeHtml(s: string): string {
@@ -29,10 +32,11 @@ function escapeHtml(s: string): string {
 
 function buildWelcomeContent(
   email: string,
-  brandValues: string[]
+  brandValues: string[],
+  unsubscribeToken: string
 ): { subject: string; text: string; html: string } {
   const labels = brandValues.map(labelForBrand);
-  const unsub = unsubscribeUrl(email);
+  const unsub = unsubscribePageUrl(unsubscribeToken);
   const site = appBaseUrl();
 
   const subject = "You're on DropAlert — thanks for signing up";
@@ -87,7 +91,8 @@ Unsubscribe anytime: ${unsub}
 
 export async function sendWelcomeEmail(
   toEmail: string,
-  brandPrefs: string[]
+  brandPrefs: string[],
+  unsubscribeToken: string
 ): Promise<void> {
   const key = (process.env.RESEND_API_KEY || "").trim();
   if (!key) {
@@ -95,8 +100,12 @@ export async function sendWelcomeEmail(
   }
 
   const recipient = toEmail.trim().toLowerCase();
-  const unsub = unsubscribeUrl(recipient);
-  const { subject, text, html } = buildWelcomeContent(recipient, brandPrefs);
+  const unsubApi = unsubscribeApiUrl(unsubscribeToken);
+  const { subject, text, html } = buildWelcomeContent(
+    recipient,
+    brandPrefs,
+    unsubscribeToken
+  );
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -111,7 +120,7 @@ export async function sendWelcomeEmail(
       text,
       html,
       headers: {
-        "List-Unsubscribe": `<${unsub}>`,
+        "List-Unsubscribe": `<${unsubApi}>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       },
     }),
