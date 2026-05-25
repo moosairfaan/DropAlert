@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import pool from "@/lib/db";
 import { BRANDS } from "@/lib/brands";
+import { sendWelcomeEmail } from "@/lib/welcomeEmail";
 
 const VALID_BRANDS = BRANDS;
 
@@ -108,7 +109,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, brands: prefs }, { status: 200 });
+    let welcomeEmailSent = false;
+    try {
+      await sendWelcomeEmail(email, prefs);
+      welcomeEmailSent = true;
+    } catch (emailErr: unknown) {
+      console.error("Welcome email failed:", emailErr);
+    }
+
+    return NextResponse.json(
+      { success: true, brands: prefs, welcomeEmailSent },
+      { status: 200 }
+    );
   } catch (err: unknown) {
     console.error("Subscribe error:", err);
     return NextResponse.json(

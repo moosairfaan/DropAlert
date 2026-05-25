@@ -9,6 +9,7 @@ export function SubscribeForm() {
   const [brandPrefs, setBrandPrefs] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [welcomeWarning, setWelcomeWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function toggleBrand(value: string) {
@@ -20,6 +21,7 @@ export function SubscribeForm() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setWelcomeWarning(null);
 
     if (!email.trim()) {
       setError("Enter your email address.");
@@ -44,10 +46,16 @@ export function SubscribeForm() {
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
         detail?: string;
+        welcomeEmailSent?: boolean;
       };
 
       if (res.ok) {
         setSuccess(true);
+        if (data.welcomeEmailSent === false) {
+          setWelcomeWarning(
+            "You're subscribed, but we couldn't send a confirmation email. Check spam or try again later."
+          );
+        }
         return;
       }
 
@@ -78,6 +86,12 @@ export function SubscribeForm() {
         <p className="mt-2 text-sm font-bold leading-relaxed text-black">
           Email alerts for: {list}
         </p>
+        <p className="mt-3 text-sm font-medium text-black/80">
+          Check your inbox for a confirmation email from DropAlert.
+        </p>
+        {welcomeWarning ? (
+          <p className="mt-3 text-sm font-bold text-[#ff2d6f]">{welcomeWarning}</p>
+        ) : null}
       </div>
     );
   }

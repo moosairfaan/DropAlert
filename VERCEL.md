@@ -11,7 +11,16 @@ The Next.js app lives in **`frontend/`**. Vercel must use that folder as the pro
    - Build Command  
    (leave empty so Vercel auto-detects Next.js from `frontend/package.json`)
 
-4. **Environment Variables** → add **`DATABASE_URL`** (and any others you need)
+4. **Environment Variables** (Production + Preview):
+
+   | Variable | Purpose |
+   |----------|---------|
+   | `DATABASE_URL` | Postgres (same as Railway) |
+   | `RESEND_API_KEY` | Welcome + (via scraper) drop alert emails |
+   | `ALERT_FROM_EMAIL` | e.g. `alerts@moosairfaan.dev` |
+   | `DROPALERT_APP_URL` | e.g. `https://dropalert-sigma.vercel.app` (unsubscribe links) |
+
+   For local dev, copy `RESEND_API_KEY` and `ALERT_FROM_EMAIL` into `frontend/.env.local` too.
 
 5. **Redeploy** the latest `main` branch.
 
