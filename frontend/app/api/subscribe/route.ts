@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import pool from "@/lib/db";
+import { BRANDS } from "@/lib/brands";
 
-const VALID_BRANDS = ["Supreme", "Nike", "StockX"] as const;
+const VALID_BRANDS = BRANDS;
 
 function pgErrCode(err: unknown): string | undefined {
   if (typeof err === "object" && err !== null && "code" in err) {

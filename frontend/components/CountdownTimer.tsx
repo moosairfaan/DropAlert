@@ -42,6 +42,6 @@ export function CountdownTimer({ scrapedAt }: { scrapedAt: string }) {
   );
 
   return (
-    <span className="text-[12px] font-semibold text-violet-500">{label}</span>
+    <span className="text-xs font-bold italic text-neutral-500">{label}</span>
   );
 }

@@ -315,7 +315,13 @@ async def _products_from_next_data_only(page: Any) -> list[dict]:
     return out
 
 
-async def scrape_nike() -> list[dict]:
+def is_jordan_drop(drop: dict) -> bool:
+    blob = (drop.get("name") or "").lower()
+    hints = ("jordan", "air jordan", "aj1", "aj2", "aj3", "aj4", "aj ", "trunner")
+    return any(h in blob for h in hints)
+
+
+async def fetch_nike_launch() -> list[dict]:
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
@@ -344,6 +350,11 @@ async def scrape_nike() -> list[dict]:
     except Exception as e:
         print(e)
         return []
+
+
+async def scrape_nike() -> list[dict]:
+    rows = await fetch_nike_launch()
+    return [d for d in rows if not is_jordan_drop(d)]
 
 
 if __name__ == "__main__":

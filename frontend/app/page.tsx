@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { SubscribeForm } from "@/components/SubscribeForm";
+import { BRAND_TAGLINE } from "@/lib/brands";
 import { getDrops, getStats } from "@/lib/db";
 
 /** Fresh stats/drops from Postgres on every request */
@@ -16,10 +17,16 @@ function num(v: unknown): number {
 
 function brandBadgeClass(brand: string): string {
   const b = brand.toLowerCase();
-  if (b === "supreme") return "bg-red-500 text-white shadow-md shadow-red-500/30";
-  if (b === "nike") return "bg-violet-600 text-white shadow-md shadow-violet-600/30";
-  if (b === "stockx") return "bg-emerald-500 text-white shadow-md shadow-emerald-500/30";
-  return "bg-cyan-500 text-white shadow-md shadow-cyan-500/30";
+  if (b === "supreme") return "bg-red-500 text-white";
+  if (b === "nike") return "bg-violet-600 text-white";
+  if (b === "jordan") return "bg-orange-500 text-white";
+  if (b === "adidas") return "bg-black text-white";
+  if (b === "new balance") return "bg-neutral-600 text-white";
+  if (b === "puma") return "bg-red-600 text-white";
+  if (b === "asics") return "bg-blue-600 text-white";
+  if (b === "kith") return "bg-zinc-800 text-white";
+  if (b === "palace") return "bg-[#ffe600] text-black";
+  return "bg-[#2d5bff] text-white";
 }
 
 function formatPrice(price: unknown): string {
@@ -30,24 +37,6 @@ function formatPrice(price: unknown): string {
     style: "currency",
     currency: "USD",
   }).format(n);
-}
-
-function parseMoney(v: unknown): number | null {
-  if (v == null) return null;
-  if (typeof v === "bigint") return Number(v);
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  if (typeof v === "string") {
-    const t = v.replace(/\$/g, "").replace(/,/g, "").trim();
-    if (!t) return null;
-    const n = parseFloat(t);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
-
-function hasResellUpside(resell: number, retail: number): boolean {
-  if (retail <= 0) return false;
-  return Math.round(resell * 100) > Math.round(retail * 100);
 }
 
 function scrapedAtIso(v: string | Date | null | undefined): string {
@@ -62,28 +51,10 @@ type DropRow = {
   brand: string;
   name: string;
   price?: unknown;
-  resell_estimate?: unknown;
   image_url?: string | null;
   product_url?: string | null;
   scraped_at?: string | Date | null;
 };
-
-function ResellUpside({ drop }: { drop: DropRow }) {
-  const resell = parseMoney(drop.resell_estimate);
-  const retail = parseMoney(drop.price);
-  if (resell == null || retail == null || !hasResellUpside(resell, retail)) {
-    return null;
-  }
-  const pct = (((resell - retail) / retail) * 100).toFixed(0);
-  return (
-    <div className="mt-2">
-      <div className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700 ring-2 ring-emerald-300">
-        📈 Est. resell: {formatPrice(drop.resell_estimate)}
-      </div>
-      <p className="mt-1 text-xs font-bold text-emerald-600">+{pct}% profit</p>
-    </div>
-  );
-}
 
 export default async function Home() {
   let subscriberCount = 0;
@@ -114,79 +85,83 @@ export default async function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-violet-50 to-cyan-50 text-[#1a1033]">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -left-20 top-20 h-64 w-64 rounded-full bg-rose-300/40 blur-3xl" />
-        <div className="absolute -right-16 top-40 h-72 w-72 rounded-full bg-violet-300/40 blur-3xl" />
-        <div className="absolute bottom-20 left-1/3 h-56 w-56 rounded-full bg-cyan-300/35 blur-3xl" />
-      </div>
-
+    <div className="min-h-screen bg-[#fff8f0] text-black">
       <div className="relative mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
         <header className="mb-14 text-center">
-          <h1 className="bg-gradient-to-r from-rose-500 via-violet-600 to-cyan-500 bg-clip-text text-4xl font-extrabold tracking-tight text-transparent sm:text-5xl">
-            🔔 DropAlert
+          <p className="font-sans text-xs font-extrabold uppercase tracking-[0.2em] text-[#ff2d6f]">
+            Streetwear + sneakers
+          </p>
+          <h1 className="mt-2 font-serif text-5xl font-bold italic tracking-tight text-black sm:text-6xl">
+            Drop<span className="font-sans not-italic text-[#2d5bff]">Alert</span>
           </h1>
-          <p className="mx-auto mt-4 max-w-xl text-lg font-medium text-violet-900/80">
-            Free email alerts for Supreme, Nike SNKRS, and StockX — catch releases
-            before they sell out.
+          <p className="mx-auto mt-5 max-w-2xl font-sans text-base font-medium leading-relaxed text-neutral-800 sm:text-lg">
+            <span className="font-serif font-bold italic">Free email alerts</span>{" "}
+            for {BRAND_TAGLINE}. Catch releases{" "}
+            <span className="font-extrabold">before they sell out.</span>
           </p>
 
-          <div className="mx-auto mt-8 flex max-w-2xl flex-wrap items-center justify-center gap-3 text-sm font-semibold">
-            <span className="rounded-full bg-white px-4 py-2 text-violet-700 shadow-md ring-2 ring-violet-200">
-              {subscriberCount.toLocaleString()} Subscribers
+          <div className="mx-auto mt-8 flex max-w-3xl flex-wrap items-center justify-center gap-3">
+            <span className="border-4 border-black bg-[#ffe600] px-4 py-2 font-extrabold shadow-pop-sm">
+              {subscriberCount.toLocaleString()}{" "}
+              <span className="font-serif font-bold italic">subscribers</span>
             </span>
-            <span className="text-violet-400">·</span>
-            <span className="rounded-full bg-white px-4 py-2 text-rose-600 shadow-md ring-2 ring-rose-200">
-              {alertsSent.toLocaleString()} Emails Sent
+            <span className="border-4 border-black bg-white px-4 py-2 font-extrabold shadow-pop-sm">
+              {alertsSent.toLocaleString()}{" "}
+              <span className="font-serif font-bold italic">emails sent</span>
             </span>
-            <span className="text-violet-400">·</span>
-            <span className="rounded-full bg-white px-4 py-2 text-cyan-700 shadow-md ring-2 ring-cyan-200">
-              {dropsTracked.toLocaleString()} Drops Tracked
+            <span className="border-4 border-black bg-[#2d5bff] px-4 py-2 font-extrabold text-white shadow-pop-sm">
+              {dropsTracked.toLocaleString()}{" "}
+              <span className="font-serif font-bold italic">drops</span>
             </span>
           </div>
 
           <div className="mt-10">
             <a
               href="#subscribe"
-              className="inline-block rounded-full bg-gradient-to-r from-rose-500 to-violet-600 px-8 py-3.5 font-bold text-white shadow-lg shadow-violet-500/40 transition hover:scale-105 hover:shadow-xl"
+              className="inline-block border-4 border-black bg-[#ff2d6f] px-8 py-3.5 font-extrabold uppercase tracking-wide text-white shadow-pop transition hover:bg-[#e82663]"
             >
-              Get Email Alerts
+              Get email alerts
             </a>
           </div>
         </header>
 
         <section className="mb-20">
-          <h2 className="mb-8 text-center text-3xl font-extrabold text-violet-900">
-            Latest Drops
+          <h2 className="mb-2 text-center font-serif text-4xl font-bold italic text-black">
+            Latest drops
           </h2>
+          <p className="mb-8 text-center font-sans text-sm font-bold uppercase tracking-widest text-neutral-500">
+            Live from the scraper
+          </p>
 
           {dbError ? (
-            <div className="rounded-2xl border-2 border-rose-300 bg-rose-50 px-4 py-3 text-center text-sm font-medium text-rose-800">
+            <div className="border-4 border-black bg-[#ff2d6f] px-4 py-3 text-center text-sm font-bold text-white shadow-pop-sm">
               Could not load drops: {dbError}. Check{" "}
-              <code className="rounded bg-white px-1">DATABASE_URL</code> in Vercel
-              (or <code className="rounded bg-white px-1">frontend/.env.local</code>{" "}
+              <code className="bg-black/20 px-1">DATABASE_URL</code> in Vercel
+              (or <code className="bg-black/20 px-1">frontend/.env.local</code>{" "}
               locally).
             </div>
           ) : null}
 
           {!dbError && drops.length === 0 ? (
-            <p className="text-center font-medium text-violet-700/70">
-              No drops yet. Run the scraper on Railway (
-              <code className="rounded bg-white/80 px-1">python scheduler.py</code>
-              ) to populate this feed.
+            <p className="text-center font-serif text-lg italic text-neutral-600">
+              No drops yet — run{" "}
+              <code className="rounded border-2 border-black bg-white px-1 font-sans text-sm font-bold not-italic">
+                python scheduler.py
+              </code>{" "}
+              on Railway.
             </p>
           ) : null}
 
           {!dbError && drops.length > 0 ? (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
               {drops.map((drop) => (
                 <article
                   key={drop.id}
-                  className="group relative flex flex-col overflow-hidden rounded-2xl bg-white shadow-lg ring-2 ring-violet-100 transition hover:-translate-y-1 hover:shadow-xl hover:ring-violet-300"
+                  className="group flex flex-col overflow-hidden border-4 border-black bg-white shadow-pop transition hover:-translate-y-1 hover:shadow-pop-lg"
                 >
-                  <div className="relative h-52 w-full shrink-0 bg-gradient-to-br from-violet-100 to-rose-100">
+                  <div className="relative h-52 w-full shrink-0 border-b-4 border-black bg-[#ffe600]">
                     <span
-                      className={`absolute left-3 top-3 z-10 rounded-full px-3 py-1 text-xs font-bold uppercase ${brandBadgeClass(drop.brand)}`}
+                      className={`absolute left-3 top-3 z-10 border-2 border-black px-3 py-1 text-xs font-extrabold uppercase ${brandBadgeClass(drop.brand)}`}
                     >
                       {String(drop.brand).toUpperCase()}
                     </span>
@@ -195,7 +170,7 @@ export default async function Home() {
                       <img
                         src={drop.image_url}
                         alt={drop.name}
-                        className="h-full w-full object-cover transition group-hover:scale-105"
+                        className="h-full w-full object-cover"
                       />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-5xl">
@@ -204,13 +179,12 @@ export default async function Home() {
                     )}
                   </div>
                   <div className="flex flex-1 flex-col p-4">
-                    <h3 className="line-clamp-2 font-bold leading-snug text-violet-950">
+                    <h3 className="line-clamp-2 font-serif text-lg font-bold leading-snug text-black">
                       {drop.name}
                     </h3>
-                    <p className="mt-2 text-xl font-extrabold text-rose-500">
+                    <p className="mt-2 font-sans text-2xl font-extrabold text-[#ff2d6f]">
                       {formatPrice(drop.price)}
                     </p>
-                    <ResellUpside drop={drop} />
                     <div className="mt-2">
                       <CountdownTimer
                         scrapedAt={scrapedAtIso(drop.scraped_at)}
@@ -221,9 +195,9 @@ export default async function Home() {
                         href={drop.product_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-4 block w-full rounded-xl bg-gradient-to-r from-violet-600 to-cyan-500 py-3 text-center text-sm font-bold text-white shadow-md transition hover:from-violet-500 hover:to-cyan-400"
+                        className="mt-4 block w-full border-4 border-black bg-[#2d5bff] py-3 text-center text-sm font-extrabold uppercase tracking-wide text-white transition hover:bg-[#2449d4]"
                       >
-                        Shop Now →
+                        Shop now →
                       </a>
                     ) : null}
                   </div>
@@ -235,23 +209,25 @@ export default async function Home() {
 
         <section
           id="subscribe"
-          className="scroll-mt-8 rounded-3xl bg-white/90 px-4 py-14 shadow-xl ring-2 ring-violet-200 backdrop-blur sm:px-8"
+          className="scroll-mt-8 border-4 border-black bg-[#00d4aa] px-4 py-14 shadow-pop-lg sm:px-8"
         >
-          <h2 className="mb-2 text-center text-2xl font-extrabold text-violet-900 sm:text-3xl">
-            Get Email Alerts — Before They Sell Out
+          <h2 className="text-center font-serif text-3xl font-bold italic text-black sm:text-4xl">
+            Get alerts before sellout
           </h2>
-          <p className="mb-8 text-center text-sm font-medium text-violet-700/80">
-            Enter your email and pick the brands you want. We only send email —
-            no SMS.
+          <p className="mb-8 mt-3 text-center font-sans text-sm font-bold text-black/80">
+            Pick your brands. <span className="italic">Email only</span> — no SMS.
           </p>
           <SubscribeForm />
         </section>
 
-        <footer className="mt-16 flex flex-col items-center justify-center gap-2 border-t-2 border-violet-200/60 pt-10 text-center text-sm font-medium text-violet-700/70">
-          <p>© 2025 DropAlert · Built by Moosa Irfaan</p>
+        <footer className="mt-16 flex flex-col items-center justify-center gap-2 border-t-4 border-black pt-10 text-center">
+          <p className="font-sans text-sm font-bold">
+            © 2025 DropAlert ·{" "}
+            <span className="font-serif italic">Moosa Irfaan</span>
+          </p>
           <Link
             href="https://github.com/moosairfaan/DropAlert"
-            className="text-violet-600 underline-offset-4 hover:text-rose-500 hover:underline"
+            className="font-extrabold text-[#2d5bff] underline-offset-4 hover:text-[#ff2d6f] hover:underline"
           >
             GitHub
           </Link>

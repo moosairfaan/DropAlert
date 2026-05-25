@@ -2,16 +2,7 @@
 
 import { FormEvent, useState } from "react";
 
-const BRAND_OPTIONS = [
-  { label: "Supreme", value: "Supreme", on: "border-rose-400 bg-rose-500 text-white ring-rose-300" },
-  { label: "Nike SNKRS", value: "Nike", on: "border-violet-400 bg-violet-600 text-white ring-violet-300" },
-  { label: "StockX", value: "StockX", on: "border-emerald-400 bg-emerald-500 text-white ring-emerald-300" },
-] as const;
-
-function labelForValue(value: string): string {
-  const opt = BRAND_OPTIONS.find((o) => o.value === value);
-  return opt?.label ?? value;
-}
+import { BRAND_OPTIONS, labelForBrand } from "@/lib/brands";
 
 export function SubscribeForm() {
   const [email, setEmail] = useState("");
@@ -73,21 +64,26 @@ export function SubscribeForm() {
   const submitDisabled = loading || !email.trim();
 
   if (success) {
-    const list = brandPrefs.map(labelForValue).join(", ");
+    const list = brandPrefs.map(labelForBrand).join(", ");
     return (
-      <div className="mx-auto max-w-lg rounded-2xl bg-gradient-to-br from-emerald-50 to-cyan-50 p-6 ring-2 ring-emerald-300 sm:p-8">
-        <p className="text-center text-lg font-bold leading-relaxed text-emerald-700">
-          ✅ You&apos;re subscribed! You&apos;ll get email alerts for: {list}
+      <div className="mx-auto max-w-lg border-4 border-black bg-[#00d4aa] p-6 shadow-pop sm:p-8">
+        <p className="font-serif text-xl font-bold italic text-black">
+          You&apos;re in.
+        </p>
+        <p className="mt-2 text-sm font-bold leading-relaxed text-black">
+          Email alerts for: {list}
         </p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-lg rounded-2xl bg-white p-6 shadow-inner ring-2 ring-violet-100 sm:p-8">
+    <div className="mx-auto max-w-lg border-4 border-black bg-white p-6 shadow-pop sm:p-8">
       <form onSubmit={onSubmit} className="flex flex-col gap-6">
-        <label className="flex flex-col gap-2 text-sm">
-          <span className="font-bold text-violet-800">Email address</span>
+        <label className="flex flex-col gap-2">
+          <span className="font-serif text-lg font-bold italic text-black">
+            Your email
+          </span>
           <input
             type="email"
             required
@@ -95,16 +91,17 @@ export function SubscribeForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="w-full rounded-xl border-2 border-violet-200 bg-violet-50/50 px-3 py-3 font-medium text-violet-950 placeholder:text-violet-400 focus:border-rose-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-200"
+            className="w-full border-4 border-black bg-[#fff8f0] px-3 py-3 text-base font-bold text-black placeholder:font-normal placeholder:italic placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#ffe600]"
           />
         </label>
-        <p className="text-xs font-medium text-violet-600/80">
-          One field — email only. We email you when we spot a new drop for your
-          brands.
+        <p className="text-xs font-medium italic text-neutral-600">
+          One field. We email you when we spot a new drop for your brands.
         </p>
 
         <div>
-          <p className="mb-3 text-sm font-bold text-violet-800">Alert me for:</p>
+          <p className="mb-3 font-sans text-sm font-extrabold uppercase tracking-wide text-black">
+            Alert me for
+          </p>
           <div className="flex flex-wrap gap-2">
             {BRAND_OPTIONS.map(({ label, value, on }) => {
               const selected = brandPrefs.includes(value);
@@ -113,10 +110,10 @@ export function SubscribeForm() {
                   key={value}
                   type="button"
                   onClick={() => toggleBrand(value)}
-                  className={`rounded-xl border-2 px-4 py-2.5 text-sm font-bold transition-all ${
+                  className={`rounded-lg border-4 px-3 py-2 text-sm font-extrabold transition-transform ${
                     selected
-                      ? `${on} ring-2 scale-105`
-                      : "border-violet-200 bg-violet-50 text-violet-600 hover:border-violet-300"
+                      ? `${on} -translate-y-0.5`
+                      : "border-black bg-white text-black hover:bg-[#ffe600]"
                   }`}
                 >
                   {label}
@@ -129,20 +126,20 @@ export function SubscribeForm() {
         <button
           type="submit"
           disabled={submitDisabled}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 via-violet-600 to-cyan-500 py-3.5 font-bold text-white shadow-lg transition hover:scale-[1.02] hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 border-4 border-black bg-[#ff2d6f] py-3.5 font-extrabold uppercase tracking-wide text-white shadow-pop transition hover:bg-[#e82663] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? (
             <>
               <Spinner />
-              <span>Subscribing...</span>
+              <span>Subscribing…</span>
             </>
           ) : (
-            "Start Getting Email Alerts"
+            "Get alerts"
           )}
         </button>
 
         {error ? (
-          <p className="text-center text-sm font-semibold text-rose-600">{error}</p>
+          <p className="text-center text-sm font-bold text-[#ff2d6f]">{error}</p>
         ) : null}
       </form>
     </div>

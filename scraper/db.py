@@ -58,16 +58,29 @@ def insert_drop(drop: dict) -> Optional[int]:
             return int(row[0]) if row else None
 
 
-def update_drop_resell_estimate(drop_id: int, resell_price: float) -> None:
-    """Updates the resell_estimate column on a drop row."""
+def touch_drop(drop: dict) -> None:
+    """Refresh scrape metadata so existing items sort to the top of the feed."""
+    sql = """
+        UPDATE drops
+        SET drop_date = %s,
+            price = %s,
+            image_url = %s,
+            product_url = %s,
+            scraped_at = NOW()
+        WHERE brand = %s AND name = %s
+    """
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "ALTER TABLE drops ADD COLUMN IF NOT EXISTS resell_estimate NUMERIC(10,2)"
-            )
-            cur.execute(
-                "UPDATE drops SET resell_estimate = %s WHERE id = %s",
-                (resell_price, drop_id),
+                sql,
+                (
+                    drop.get("drop_date"),
+                    drop.get("price"),
+                    drop.get("image_url"),
+                    drop.get("product_url"),
+                    drop.get("brand"),
+                    drop.get("name"),
+                ),
             )
 
 

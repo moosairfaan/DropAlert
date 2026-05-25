@@ -1,0 +1,219 @@
+"""Shared Playwright helpers for brand scrapers."""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+from urllib.parse import urljoin
+
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import async_playwright
+
+DEFAULT_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+MAX_ITEMS = 15
+
+
+def parse_price(text: str) -> float | None:
+    if not text:
+        return None
+    if "SOLD OUT" in text.upper():
+        return None
+    m = re.search(r"\$\s*([\d,]+\.?\d*)", text)
+    if not m:
+        return None
+    try:
+        return float(m.group(1).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def make_drop(
+    *,
+    brand: str,
+    name: str,
+    product_url: str,
+    price: float | None = None,
+    image_url: str | None = None,
+    drop_date: str | None = None,
+) -> dict:
+    return {
+        "brand": brand,
+        "name": name.strip(),
+        "price": price,
+        "image_url": image_url,
+        "product_url": product_url,
+        "drop_date": drop_date,
+    }
+
+
+async def scrape_shopify_products(url: str, brand: str, max_items: int = MAX_ITEMS) -> list[dict]:
+    """Shopify collection / shop pages (Kith, Palace, etc.)."""
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page()
+                await page.set_extra_http_headers({"User-Agent": DEFAULT_UA})
+                await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=25000)
+                except PlaywrightTimeoutError:
+                    pass
+                try:
+                    await page.wait_for_selector('a[href*="/products/"]', timeout=20000)
+                except PlaywrightTimeoutError:
+                    return []
+
+                raw: list[dict[str, Any]] = await page.evaluate(
+                    """(limit) => {
+                      const seen = new Set();
+                      const out = [];
+                      for (const a of document.querySelectorAll('a[href*="/products/"]')) {
+                        let href = a.href || '';
+                        if (!href || seen.has(href)) continue;
+                        if (href.includes('/cart') || href.includes('/account')) continue;
+                        seen.add(href);
+                        const card = a.closest('article, li, .card, .product-card, .grid__item, .product-item') || a;
+                        let name = '';
+                        const title = card.querySelector('h1, h2, h3, .product-title, [class*="title"]');
+                        if (title) name = title.innerText.trim();
+                        if (!name) {
+                          const img = card.querySelector('img');
+                          name = (img && (img.alt || img.getAttribute('title'))) || '';
+                          name = (name || '').trim();
+                        }
+                        if (!name) name = a.innerText.trim().split('\\n').filter(Boolean)[0] || '';
+                        if (!name || name.length < 2) continue;
+                        const img = card.querySelector('img');
+                        let image_url = img ? (img.currentSrc || img.src || img.getAttribute('data-src')) : null;
+                        if (image_url && image_url.startsWith('//')) image_url = 'https:' + image_url;
+                        const body = card.innerText || '';
+                        const pm = body.match(/\\$\\s*([\\d,]+\\.?\\d*)/);
+                        const price = pm ? parseFloat(pm[1].replace(/,/g, '')) : null;
+                        out.push({ name, product_url: href, image_url, price });
+                        if (out.length >= limit) break;
+                      }
+                      return out;
+                    }""",
+                    max_items * 2,
+                )
+
+                results: list[dict] = []
+                seen_names: set[str] = set()
+                for item in raw:
+                    name = (item.get("name") or "").strip()
+                    url_p = (item.get("product_url") or "").strip()
+                    if not name or not url_p or name in seen_names:
+                        continue
+                    seen_names.add(name)
+                    results.append(
+                        make_drop(
+                            brand=brand,
+                            name=name,
+                            product_url=url_p,
+                            price=item.get("price"),
+                            image_url=item.get("image_url"),
+                        )
+                    )
+                    if len(results) >= max_items:
+                        break
+                return results
+            finally:
+                await browser.close()
+    except Exception as e:
+        print(f"{brand} scraper error: {e}")
+        return []
+
+
+async def scrape_link_grid(
+    url: str,
+    brand: str,
+    *,
+    link_pattern: str,
+    max_items: int = MAX_ITEMS,
+    name_min_len: int = 3,
+) -> list[dict]:
+    """Generic product grid: find anchors matching link_pattern (substring)."""
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page()
+                await page.set_extra_http_headers({"User-Agent": DEFAULT_UA})
+                await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=25000)
+                except PlaywrightTimeoutError:
+                    pass
+
+                anchors = page.locator(f'a[href*="{link_pattern}"]')
+                try:
+                    await anchors.first.wait_for(timeout=20000)
+                except PlaywrightTimeoutError:
+                    return []
+
+                page_url = page.url
+                n = min(await anchors.count(), max_items * 3)
+                results: list[dict] = []
+                seen_urls: set[str] = set()
+
+                for i in range(n):
+                    if len(results) >= max_items:
+                        break
+                    link = anchors.nth(i)
+                    href = await link.get_attribute("href")
+                    if not href:
+                        continue
+                    product_url = urljoin(page_url, href)
+                    if product_url in seen_urls:
+                        continue
+                    seen_urls.add(product_url)
+
+                    card = link.locator(
+                        "xpath=ancestor::article | ancestor::li | ancestor::div[contains(@class,'product')]"
+                    ).first
+                    if await card.count() == 0:
+                        card = link
+
+                    name = ""
+                    for sel in ("h1", "h2", "h3", '[class*="title"]', '[class*="name"]'):
+                        el = card.locator(sel).first
+                        if await el.count() > 0:
+                            name = (await el.inner_text()).strip()
+                            if name:
+                                break
+                    if not name:
+                        img = card.locator("img").first
+                        if await img.count() > 0:
+                            name = (await img.get_attribute("alt") or "").strip()
+                    if not name:
+                        name = (await link.inner_text()).strip().split("\n")[0].strip()
+                    if len(name) < name_min_len:
+                        continue
+
+                    price = parse_price(await card.inner_text())
+                    image_url = None
+                    img = card.locator("img").first
+                    if await img.count() > 0:
+                        image_url = await img.get_attribute("src")
+                        if image_url and image_url.startswith("//"):
+                            image_url = "https:" + image_url
+
+                    results.append(
+                        make_drop(
+                            brand=brand,
+                            name=name,
+                            price=price,
+                            image_url=image_url,
+                            product_url=product_url,
+                        )
+                    )
+                return results
+            finally:
+                await browser.close()
+    except Exception as e:
+        print(f"{brand} scraper error: {e}")
+        return []

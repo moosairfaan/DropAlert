@@ -1,8 +1,8 @@
 # DropAlert
 
-### Real-time email alerts for Supreme, Nike SNKRS, and StockX drops
+### Real-time email alerts for streetwear and sneaker drops
 
-DropAlert scrapes three of the most competitive streetwear and sneaker platforms every 30 minutes using Playwright. When a new drop is detected, subscribers get an email before it sells out.
+DropAlert scrapes Supreme, Nike SNKRS, Jordan, Adidas, New Balance, Puma, ASICS, Kith, and Palace every 30 minutes using Playwright. When a new drop is detected, subscribers get an email before it sells out.
 
 **Live app:** [https://dropalert-sigma.vercel.app/#subscribe](https://dropalert-sigma.vercel.app/#subscribe)  
 |  
@@ -16,7 +16,7 @@ DropAlert scrapes three of the most competitive streetwear and sneaker platforms
 | Alerts sent | 0+ |
 | Drops tracked | 15+ |
 | Uptime | 99.9% |
-| Brands covered | Supreme, Nike SNKRS, StockX |
+| Brands covered | Supreme, Nike, Jordan, Adidas, New Balance, Puma, ASICS, Kith, Palace |
 | Alert channels | Email (Resend) |
 | Pipeline frequency | Every 30 minutes |
 
@@ -24,7 +24,7 @@ DropAlert scrapes three of the most competitive streetwear and sneaker platforms
 
 ## How It Works
 
-1. Playwright scrapes Supreme, Nike SNKRS, and StockX every 30 minutes on Railway
+1. Playwright scrapes all supported brands every 30 minutes on Railway (parallel scrapers)
 2. New drops are deduplicated using Redis (48hr TTL key per drop)
 3. New drops are inserted into PostgreSQL
 4. Email alerts are sent to subscribers who follow that brand
