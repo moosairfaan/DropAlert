@@ -9,14 +9,31 @@ declare global {
   var ensuredDropsResellColumn: boolean | undefined;
 }
 
+function poolSsl():
+  | boolean
+  | { rejectUnauthorized: boolean }
+  | undefined {
+  const url = (process.env.DATABASE_URL || "").toLowerCase();
+  if (!url) return undefined;
+  // Railway / most hosted Postgres require TLS from local dev and Vercel.
+  const needsSsl =
+    url.includes("railway") ||
+    url.includes("rlwy.net") ||
+    url.includes("supabase") ||
+    url.includes("neon.tech") ||
+    url.includes("sslmode=require");
+  if (needsSsl) return { rejectUnauthorized: false };
+  if (process.env.NODE_ENV === "production") {
+    return { rejectUnauthorized: false };
+  }
+  return false;
+}
+
 const pool =
   globalThis.pgPool ??
   new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl:
-      process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: false }
-        : false,
+    ssl: poolSsl(),
   });
 
 if (process.env.NODE_ENV !== "production") globalThis.pgPool = pool;
