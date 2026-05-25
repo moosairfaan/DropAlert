@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CountdownTimer } from "@/components/CountdownTimer";
 import {
@@ -11,7 +11,8 @@ import {
   type DropRow,
 } from "@/lib/dropDisplay";
 
-const POLL_MS = 60_000;
+/** How often to pull /api/feed while the tab is open */
+const POLL_MS = 15_000;
 
 type FeedStats = {
   subscriber_count?: unknown;
@@ -28,7 +29,18 @@ type Props = {
 function formatRefreshTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function feedFingerprint(drops: DropRow[], stats: FeedStats): string {
+  return JSON.stringify({
+    s: stats,
+    d: drops.map((row) => [row.id, row.scraped_at, row.price, row.name]),
+  });
 }
 
 export function LiveFeed({
@@ -42,11 +54,18 @@ export function LiveFeed({
   const [dbError, setDbError] = useState(initialDbError);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [justUpdated, setJustUpdated] = useState(false);
+  const fingerprintRef = useRef(
+    feedFingerprint(initialDrops, initialStats)
+  );
 
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
+  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setRefreshing(true);
     try {
-      const res = await fetch("/api/feed", { cache: "no-store" });
+      const res = await fetch("/api/feed", {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const data = (await res.json().catch(() => ({}))) as {
         drops?: DropRow[];
         stats?: FeedStats;
@@ -60,8 +79,18 @@ export function LiveFeed({
       }
 
       setDbError(null);
-      if (Array.isArray(data.drops)) setDrops(data.drops);
-      if (data.stats) setStats(data.stats);
+      const nextDrops = Array.isArray(data.drops) ? data.drops : [];
+      const nextStats = data.stats ?? {};
+      const nextFp = feedFingerprint(nextDrops, nextStats);
+
+      if (nextFp !== fingerprintRef.current) {
+        fingerprintRef.current = nextFp;
+        setDrops(nextDrops);
+        setStats(nextStats);
+        setJustUpdated(true);
+        window.setTimeout(() => setJustUpdated(false), 2500);
+      }
+
       if (data.updatedAt) setLastUpdated(data.updatedAt);
     } catch {
       setDbError("Could not reach the server to refresh.");
@@ -71,17 +100,39 @@ export function LiveFeed({
   }, []);
 
   useEffect(() => {
-    const id = window.setInterval(() => {
-      void refresh();
-    }, POLL_MS);
+    void refresh({ silent: true });
+
+    let pollId: number | null = null;
+
+    const startPolling = () => {
+      if (pollId != null) return;
+      pollId = window.setInterval(
+        () => void refresh({ silent: true }),
+        POLL_MS
+      ) as unknown as number;
+    };
+
+    const stopPolling = () => {
+      if (pollId != null) {
+        window.clearInterval(pollId);
+        pollId = null;
+      }
+    };
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "visible") {
+        void refresh({ silent: true });
+        startPolling();
+      } else {
+        stopPolling();
+      }
     };
+
+    if (document.visibilityState === "visible") startPolling();
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
-      clearInterval(id);
+      stopPolling();
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [refresh]);
@@ -110,18 +161,32 @@ export function LiveFeed({
         <h2 className="mb-2 text-center font-serif text-4xl font-bold italic text-black">
           Latest drops
         </h2>
-        <p className="mb-2 text-center font-sans text-sm font-bold uppercase tracking-widest text-neutral-500">
-          Auto-refreshes every minute
-        </p>
-        <p className="mb-8 text-center font-sans text-xs font-medium text-neutral-500">
-          {refreshing ? (
-            <span>Updating…</span>
-          ) : lastUpdated ? (
-            <span>Feed synced at {formatRefreshTime(lastUpdated)}</span>
-          ) : (
-            <span>Scraper on Railway updates the database every 30 minutes</span>
-          )}
-        </p>
+        <div className="mb-8 flex flex-col items-center justify-center gap-3">
+          <p className="text-center font-sans text-sm font-bold uppercase tracking-widest text-neutral-500">
+            {justUpdated ? (
+              <span className="text-[#ff2d6f]">New data loaded</span>
+            ) : (
+              <>Live · refreshes every {POLL_MS / 1000}s</>
+            )}
+          </p>
+          <p className="text-center font-sans text-xs font-medium text-neutral-500">
+            {refreshing ? (
+              <span>Updating…</span>
+            ) : lastUpdated ? (
+              <span>Last sync {formatRefreshTime(lastUpdated)}</span>
+            ) : (
+              <span>Railway scraper updates the database every 30 minutes</span>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={refreshing}
+            className="border-4 border-black bg-white px-4 py-2 text-xs font-extrabold uppercase tracking-wide shadow-pop-sm transition hover:bg-[#ffe600] disabled:opacity-50"
+          >
+            {refreshing ? "Refreshing…" : "Refresh now"}
+          </button>
+        </div>
 
         {dbError ? (
           <div className="border-4 border-black bg-[#ff2d6f] px-4 py-3 text-center text-sm font-bold text-white shadow-pop-sm">

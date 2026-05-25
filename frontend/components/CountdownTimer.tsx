@@ -32,7 +32,7 @@ export function CountdownTimer({ scrapedAt }: { scrapedAt: string }) {
   useEffect(() => {
     const id = window.setInterval(() => {
       setTick((n) => n + 1);
-    }, 60_000);
+    }, 30_000);
     return () => clearInterval(id);
   }, []);
 
