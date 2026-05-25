@@ -55,9 +55,9 @@ export async function getDrops(limit = 50) {
 export async function getStats() {
   const { rows } = await pool.query(`
     SELECT
-      (SELECT COUNT(*) FROM subscribers WHERE active = true) as subscriber_count,
-      (SELECT COUNT(*) FROM alerts_sent) as alerts_sent,
-      (SELECT COUNT(*) FROM drops) as drops_tracked
+      (SELECT COUNT(*) FROM subscribers WHERE active = true) AS subscriber_count,
+      (SELECT COUNT(*) FROM drops) AS drops_tracked,
+      (SELECT COUNT(DISTINCT brand) FROM drops) AS brands_live
   `);
   return rows[0];
 }

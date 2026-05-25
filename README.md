@@ -13,7 +13,7 @@ DropAlert scrapes Supreme, Nike SNKRS, Jordan, Adidas, New Balance, Puma, ASICS,
 | Metric | Value |
 |--------|-------|
 | Subscribers | 2+ |
-| Alerts sent | 0+ |
+| Brands monitored | 9 |
 | Drops tracked | 15+ |
 | Uptime | 99.9% |
 | Brands covered | Supreme, Nike, Jordan, Adidas, New Balance, Puma, ASICS, Kith, Palace |

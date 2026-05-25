@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { SubscribeForm } from "@/components/SubscribeForm";
-import { BRAND_TAGLINE } from "@/lib/brands";
+import { BRAND_TAGLINE, BRANDS } from "@/lib/brands";
 import { getDrops, getStats } from "@/lib/db";
 
 /** Fresh stats/drops from Postgres on every request */
@@ -58,8 +58,8 @@ type DropRow = {
 
 export default async function Home() {
   let subscriberCount = 0;
-  let alertsSent = 0;
   let dropsTracked = 0;
+  const brandsMonitored = BRANDS.length;
   let drops: DropRow[] = [];
   let dbError: string | null = null;
 
@@ -71,7 +71,6 @@ export default async function Home() {
     if (s && typeof s === "object") {
       const row = s as Record<string, unknown>;
       subscriberCount = num(row.subscriber_count);
-      alertsSent = num(row.alerts_sent);
       dropsTracked = num(row.drops_tracked);
     }
     const rows = await getDrops(50);
@@ -106,8 +105,8 @@ export default async function Home() {
               <span className="font-serif font-bold italic">subscribers</span>
             </span>
             <span className="border-4 border-black bg-white px-4 py-2 font-extrabold shadow-pop-sm">
-              {alertsSent.toLocaleString()}{" "}
-              <span className="font-serif font-bold italic">emails sent</span>
+              {brandsMonitored.toLocaleString()}{" "}
+              <span className="font-serif font-bold italic">brands monitored</span>
             </span>
             <span className="border-4 border-black bg-[#2d5bff] px-4 py-2 font-extrabold text-white shadow-pop-sm">
               {dropsTracked.toLocaleString()}{" "}
