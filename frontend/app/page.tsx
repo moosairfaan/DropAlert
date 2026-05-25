@@ -1,80 +1,25 @@
 import Link from "next/link";
 
-import { CountdownTimer } from "@/components/CountdownTimer";
+import { LiveFeed } from "@/components/LiveFeed";
 import { SubscribeForm } from "@/components/SubscribeForm";
 import { BRAND_TAGLINE, BRANDS } from "@/lib/brands";
+import { type DropRow } from "@/lib/dropDisplay";
 import { getDrops, getStats } from "@/lib/db";
 
-/** Fresh stats/drops from Postgres on every request */
+/** Fresh stats/drops from Postgres on first paint; client polls /api/feed after */
 export const dynamic = "force-dynamic";
 
-function num(v: unknown): number {
-  if (typeof v === "bigint") return Number(v);
-  if (typeof v === "number") return v;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function brandBadgeClass(brand: string): string {
-  const b = brand.toLowerCase();
-  if (b === "supreme") return "bg-red-500 text-white";
-  if (b === "nike") return "bg-violet-600 text-white";
-  if (b === "jordan") return "bg-orange-500 text-white";
-  if (b === "adidas") return "bg-black text-white";
-  if (b === "new balance") return "bg-neutral-600 text-white";
-  if (b === "puma") return "bg-red-600 text-white";
-  if (b === "asics") return "bg-blue-600 text-white";
-  if (b === "kith") return "bg-zinc-800 text-white";
-  if (b === "palace") return "bg-[#ffe600] text-black";
-  return "bg-[#2d5bff] text-white";
-}
-
-function formatPrice(price: unknown): string {
-  if (price == null) return "—";
-  const n = typeof price === "string" ? parseFloat(price) : Number(price);
-  if (!Number.isFinite(n)) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(n);
-}
-
-function scrapedAtIso(v: string | Date | null | undefined): string {
-  if (v == null) return "";
-  if (typeof v === "string") return v;
-  if (v instanceof Date) return v.toISOString();
-  return "";
-}
-
-type DropRow = {
-  id: number;
-  brand: string;
-  name: string;
-  price?: unknown;
-  image_url?: string | null;
-  product_url?: string | null;
-  scraped_at?: string | Date | null;
-};
-
 export default async function Home() {
-  let subscriberCount = 0;
-  let dropsTracked = 0;
-  const brandsMonitored = BRANDS.length;
-  let drops: DropRow[] = [];
+  let initialStats: Record<string, unknown> = {};
+  let initialDrops: DropRow[] = [];
   let dbError: string | null = null;
 
   try {
     if (!process.env.DATABASE_URL) {
       throw new Error("DATABASE_URL is not set");
     }
-    const s = await getStats();
-    if (s && typeof s === "object") {
-      const row = s as Record<string, unknown>;
-      subscriberCount = num(row.subscriber_count);
-      dropsTracked = num(row.drops_tracked);
-    }
-    const rows = await getDrops(50);
-    drops = rows as DropRow[];
+    initialStats = (await getStats()) as Record<string, unknown>;
+    initialDrops = (await getDrops(50)) as DropRow[];
   } catch (err) {
     console.error(err);
     dbError =
@@ -99,21 +44,6 @@ export default async function Home() {
             <span className="font-extrabold">before they sell out.</span>
           </p>
 
-          <div className="mx-auto mt-8 flex max-w-3xl flex-wrap items-center justify-center gap-3">
-            <span className="border-4 border-black bg-[#ffe600] px-4 py-2 font-extrabold shadow-pop-sm">
-              {subscriberCount.toLocaleString()}{" "}
-              <span className="font-serif font-bold italic">subscribers</span>
-            </span>
-            <span className="border-4 border-black bg-white px-4 py-2 font-extrabold shadow-pop-sm">
-              {brandsMonitored.toLocaleString()}{" "}
-              <span className="font-serif font-bold italic">brands monitored</span>
-            </span>
-            <span className="border-4 border-black bg-[#2d5bff] px-4 py-2 font-extrabold text-white shadow-pop-sm">
-              {dropsTracked.toLocaleString()}{" "}
-              <span className="font-serif font-bold italic">drops</span>
-            </span>
-          </div>
-
           <div className="mt-10">
             <a
               href="#subscribe"
@@ -124,87 +54,12 @@ export default async function Home() {
           </div>
         </header>
 
-        <section className="mb-20">
-          <h2 className="mb-2 text-center font-serif text-4xl font-bold italic text-black">
-            Latest drops
-          </h2>
-          <p className="mb-8 text-center font-sans text-sm font-bold uppercase tracking-widest text-neutral-500">
-            Live from the scraper
-          </p>
-
-          {dbError ? (
-            <div className="border-4 border-black bg-[#ff2d6f] px-4 py-3 text-center text-sm font-bold text-white shadow-pop-sm">
-              Could not load drops: {dbError}. Check{" "}
-              <code className="bg-black/20 px-1">DATABASE_URL</code> in Vercel
-              (or <code className="bg-black/20 px-1">frontend/.env.local</code>{" "}
-              locally).
-            </div>
-          ) : null}
-
-          {!dbError && drops.length === 0 ? (
-            <p className="text-center font-serif text-lg italic text-neutral-600">
-              No drops yet — run{" "}
-              <code className="rounded border-2 border-black bg-white px-1 font-sans text-sm font-bold not-italic">
-                python scheduler.py
-              </code>{" "}
-              on Railway.
-            </p>
-          ) : null}
-
-          {!dbError && drops.length > 0 ? (
-            <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-              {drops.map((drop) => (
-                <article
-                  key={drop.id}
-                  className="group flex flex-col overflow-hidden border-4 border-black bg-white shadow-pop transition hover:-translate-y-1 hover:shadow-pop-lg"
-                >
-                  <div className="relative h-52 w-full shrink-0 border-b-4 border-black bg-[#ffe600]">
-                    <span
-                      className={`absolute left-3 top-3 z-10 border-2 border-black px-3 py-1 text-xs font-extrabold uppercase ${brandBadgeClass(drop.brand)}`}
-                    >
-                      {String(drop.brand).toUpperCase()}
-                    </span>
-                    {drop.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- external scrape URLs
-                      <img
-                        src={drop.image_url}
-                        alt={drop.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-5xl">
-                        👟
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-1 flex-col p-4">
-                    <h3 className="line-clamp-2 font-serif text-lg font-bold leading-snug text-black">
-                      {drop.name}
-                    </h3>
-                    <p className="mt-2 font-sans text-2xl font-extrabold text-[#ff2d6f]">
-                      {formatPrice(drop.price)}
-                    </p>
-                    <div className="mt-2">
-                      <CountdownTimer
-                        scrapedAt={scrapedAtIso(drop.scraped_at)}
-                      />
-                    </div>
-                    {drop.product_url ? (
-                      <a
-                        href={drop.product_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-4 block w-full border-4 border-black bg-[#2d5bff] py-3 text-center text-sm font-extrabold uppercase tracking-wide text-white transition hover:bg-[#2449d4]"
-                      >
-                        Shop now →
-                      </a>
-                    ) : null}
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : null}
-        </section>
+        <LiveFeed
+          initialDrops={initialDrops}
+          initialStats={initialStats}
+          initialDbError={dbError}
+          brandsMonitored={BRANDS.length}
+        />
 
         <section
           id="subscribe"
