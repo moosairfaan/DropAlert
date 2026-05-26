@@ -7,6 +7,7 @@ import { BRAND_OPTIONS, labelForBrand } from "@/lib/brands";
 export function SubscribeForm() {
   const [email, setEmail] = useState("");
   const [brandPrefs, setBrandPrefs] = useState<string[]>([]);
+  const [styleDescription, setStyleDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [welcomeWarning, setWelcomeWarning] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export function SubscribeForm() {
         body: JSON.stringify({
           email: email.trim(),
           brandPrefs,
+          styleDescription: styleDescription.trim() || undefined,
         }),
       });
 
@@ -89,6 +91,11 @@ export function SubscribeForm() {
         <p className="mt-3 text-sm font-medium text-black/80">
           Check your inbox for a confirmation email from DropAlert.
         </p>
+        {styleDescription.trim() ? (
+          <p className="mt-2 text-sm font-medium text-black/80">
+            We&apos;ll personalize alerts to match: &quot;{styleDescription.trim()}&quot;
+          </p>
+        ) : null}
         {welcomeWarning ? (
           <p className="mt-3 text-sm font-bold text-[#ff2d6f]">{welcomeWarning}</p>
         ) : null}
@@ -141,6 +148,27 @@ export function SubscribeForm() {
             })}
           </div>
         </div>
+
+        <label className="flex flex-col gap-2">
+          <span className="font-serif text-lg font-bold italic text-black">
+            Describe your style{" "}
+            <span className="font-sans text-sm font-bold not-italic text-neutral-500">
+              (optional)
+            </span>
+          </span>
+          <input
+            type="text"
+            value={styleDescription}
+            onChange={(e) => setStyleDescription(e.target.value)}
+            maxLength={500}
+            placeholder="I like chunky retro runners under $150, preferably Nike or New Balance."
+            className="w-full border-4 border-black bg-[#fff8f0] px-3 py-3 text-base font-medium text-black placeholder:font-normal placeholder:italic placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#ffe600]"
+          />
+          <span className="text-xs font-medium italic text-neutral-600">
+            With a style note, we use AI to only email drops that match your vibe.
+            Leave blank for every drop on your brands.
+          </span>
+        </label>
 
         <button
           type="submit"

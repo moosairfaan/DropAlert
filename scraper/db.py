@@ -324,6 +324,12 @@ def ensure_subscriber_schema() -> None:
             )
             cur.execute(
                 """
+                ALTER TABLE subscribers
+                ADD COLUMN IF NOT EXISTS style_description TEXT
+                """
+            )
+            cur.execute(
+                """
                 CREATE UNIQUE INDEX IF NOT EXISTS subscribers_unsubscribe_token_idx
                 ON subscribers (unsubscribe_token)
                 WHERE unsubscribe_token IS NOT NULL
@@ -351,11 +357,11 @@ def ensure_subscriber_schema() -> None:
 def get_subscribers_for_brand(brand: str) -> list[dict]:
     """
     Queries subscribers WHERE active=TRUE AND brand_prefs @> ARRAY[brand]
-    Returns list of dicts with keys: id, email, unsubscribe_token
+    Returns list of dicts with keys: id, email, unsubscribe_token, style_description
     """
     ensure_subscriber_schema()
     sql = """
-        SELECT id, email, unsubscribe_token
+        SELECT id, email, unsubscribe_token, style_description
         FROM subscribers
         WHERE active = TRUE
           AND email IS NOT NULL

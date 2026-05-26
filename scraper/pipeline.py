@@ -127,22 +127,37 @@ async def run_pipeline() -> dict:
 async def send_alerts_for_drop(drop_id: int, drop: dict) -> int:
     """Sends email alerts to eligible subscribers. Returns count of alerts sent."""
     from alerts.resend_alerts import send_email
+    from alerts.style_match import drop_matches_style
 
     count = 0
     subscribers = get_subscribers_for_brand(drop["brand"])
     for sub in subscribers:
         token = sub.get("unsubscribe_token")
-        if (
-            sub.get("email")
-            and token
-            and not has_alert_been_sent(drop_id, sub["id"], "email")
+        if not sub.get("email") or not token:
+            continue
+        if has_alert_been_sent(drop_id, sub["id"], "email"):
+            continue
+
+        style = sub.get("style_description")
+        if not drop_matches_style(
+            style,
+            name=str(drop.get("name") or ""),
+            brand=str(drop.get("brand") or ""),
+            price=drop.get("price"),
         ):
-            try:
-                send_email(sub["email"], drop, unsubscribe_token=str(token))
-                log_alert_sent(drop_id, sub["id"], "email")
-                count += 1
-            except Exception as e:
-                log.error("Email failed for subscriber %s: %s", sub["id"], e)
+            log.info(
+                "SKIP alert (style filter): subscriber %s — %s",
+                sub["id"],
+                drop.get("name"),
+            )
+            continue
+
+        try:
+            send_email(sub["email"], drop, unsubscribe_token=str(token))
+            log_alert_sent(drop_id, sub["id"], "email")
+            count += 1
+        except Exception as e:
+            log.error("Email failed for subscriber %s: %s", sub["id"], e)
 
     return count
 

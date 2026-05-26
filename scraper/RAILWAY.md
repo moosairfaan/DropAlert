@@ -79,6 +79,7 @@ In Railway → **your scraper service** → **Variables**:
 | `RESEND_API_KEY` | From [Resend](https://resend.com) |
 | `ALERT_FROM_EMAIL` | e.g. `alerts@yourdomain.com` |
 | `DROPALERT_APP_URL` | e.g. `https://dropalert-sigma.vercel.app` |
+| `ANTHROPIC_API_KEY` | For personalized style-matched alert emails (optional) |
 
 Optional:
 

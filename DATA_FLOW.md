@@ -29,6 +29,7 @@ flowchart LR
 | Pipeline | `scraper/pipeline.py` | Scrapes 9 brands → `filter_shoe_drops()` |
 | Write | `scraper/db.py` → `upsert_drop()` | `INSERT` or `UPDATE` on `drops`; sets `scraped_at = NOW()` |
 | Commit | `upsert_drop()` | `conn.commit()` after each write |
+| Alert filter | `scraper/alerts/style_match.py` | If subscriber has `style_description`, Claude YES/NO before email |
 
 **Env:** `DATABASE_URL` on the **Railway scraper service** (reference Postgres plugin).
 

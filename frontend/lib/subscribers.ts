@@ -12,6 +12,10 @@ export async function ensureSubscriberSchema(): Promise<void> {
         ADD COLUMN IF NOT EXISTS unsubscribe_token TEXT
       `);
       await pool.query(`
+        ALTER TABLE subscribers
+        ADD COLUMN IF NOT EXISTS style_description TEXT
+      `);
+      await pool.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS subscribers_unsubscribe_token_idx
         ON subscribers (unsubscribe_token)
         WHERE unsubscribe_token IS NOT NULL

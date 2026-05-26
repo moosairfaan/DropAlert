@@ -35,6 +35,8 @@ export async function POST(req: NextRequest) {
       email?: unknown;
       brandPrefs?: unknown;
       brand_prefs?: unknown;
+      styleDescription?: unknown;
+      style_description?: unknown;
     };
 
     try {
@@ -83,6 +85,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const rawStyle =
+      typeof body.styleDescription === "string"
+        ? body.styleDescription
+        : typeof body.style_description === "string"
+          ? body.style_description
+          : "";
+    const styleDescription = rawStyle.trim().slice(0, 500) || null;
+
     if (!process.env.DATABASE_URL) {
       console.error("Subscribe error: DATABASE_URL is not set");
       return NextResponse.json(
@@ -97,17 +107,20 @@ export async function POST(req: NextRequest) {
     try {
       await pool.query(
         `
-        INSERT INTO subscribers (email, brand_prefs, active, unsubscribe_token)
-        VALUES ($1, $2::text[], true, $3)
+        INSERT INTO subscribers (
+          email, brand_prefs, active, unsubscribe_token, style_description
+        )
+        VALUES ($1, $2::text[], true, $3, $4)
         ON CONFLICT (email) DO UPDATE SET
           brand_prefs = EXCLUDED.brand_prefs,
           active = true,
+          style_description = EXCLUDED.style_description,
           unsubscribe_token = COALESCE(
             subscribers.unsubscribe_token,
             EXCLUDED.unsubscribe_token
           )
         `,
-        [email, prefs, token]
+        [email, prefs, token, styleDescription]
       );
     } catch (err: unknown) {
       if (pgErrCode(err) === "23505") {
@@ -116,10 +129,11 @@ export async function POST(req: NextRequest) {
           UPDATE subscribers
           SET brand_prefs = $1::text[],
               active = true,
+              style_description = $4,
               unsubscribe_token = COALESCE(unsubscribe_token, $3)
           WHERE email = $2
           `,
-          [prefs, email, token]
+          [prefs, email, token, styleDescription]
         );
       } else {
         throw err;
