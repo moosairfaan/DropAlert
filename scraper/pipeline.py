@@ -41,6 +41,9 @@ SCRAPERS: list[tuple[ScraperFn, str]] = [
     (scrape_palace, "Palace"),
 ]
 
+SCRAPER_BATCH_SIZE = 3
+BATCH_PAUSE_SECONDS = 2
+
 
 async def _run_scraper(scraper_fn: ScraperFn, scraper_name: str) -> tuple[list[dict], str | None]:
     try:
@@ -50,6 +53,28 @@ async def _run_scraper(scraper_fn: ScraperFn, scraper_name: str) -> tuple[list[d
     except Exception as e:
         log.error("%s scraper failed: %s", scraper_name, e)
         return [], f"{scraper_name}: {str(e)}"
+
+
+async def _run_scrapers_in_batches() -> list[tuple[list[dict], str | None]]:
+    """Run scrapers in small parallel batches to avoid OOM / page crashes on Railway."""
+    all_results: list[tuple[list[dict], str | None]] = []
+    total_batches = (len(SCRAPERS) + SCRAPER_BATCH_SIZE - 1) // SCRAPER_BATCH_SIZE
+
+    for batch_index in range(0, len(SCRAPERS), SCRAPER_BATCH_SIZE):
+        batch = SCRAPERS[batch_index : batch_index + SCRAPER_BATCH_SIZE]
+        batch_num = batch_index // SCRAPER_BATCH_SIZE + 1
+        names = ", ".join(name for _, name in batch)
+        log.info("Scraper batch %d/%d: %s", batch_num, total_batches, names)
+
+        batch_results = await asyncio.gather(
+            *[_run_scraper(fn, name) for fn, name in batch]
+        )
+        all_results.extend(batch_results)
+
+        if batch_index + SCRAPER_BATCH_SIZE < len(SCRAPERS):
+            await asyncio.sleep(BATCH_PAUSE_SECONDS)
+
+    return all_results
 
 
 async def run_pipeline() -> dict:
@@ -72,9 +97,7 @@ async def run_pipeline() -> dict:
         log.info("Pruned %d non-shoe / promo rows from database", removed)
 
     log.info("Starting scrape pipeline...")
-    scrape_results = await asyncio.gather(
-        *[_run_scraper(fn, name) for fn, name in SCRAPERS]
-    )
+    scrape_results = await _run_scrapers_in_batches()
 
     results: list[dict] = []
     for drops, err in scrape_results:

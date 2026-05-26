@@ -7,7 +7,7 @@ from urllib.parse import urljoin, urlparse
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
-from scrapers._common import filter_shoe_drops
+from scrapers._common import filter_shoe_drops, launch_chromium
 
 
 LAUNCH_URL = "https://www.nike.com/launch"
@@ -326,7 +326,7 @@ def is_jordan_drop(drop: dict) -> bool:
 async def fetch_nike_launch() -> list[dict]:
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await launch_chromium(p)
             try:
                 page = await browser.new_page()
                 await page.set_extra_http_headers({"User-Agent": NIKE_UA})

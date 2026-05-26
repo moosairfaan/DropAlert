@@ -8,12 +8,23 @@ from urllib.parse import urljoin
 
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
+from playwright.async_api import Playwright
 
 DEFAULT_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 MAX_ITEMS = 15
+
+# Required for stable headless Chromium in Docker / Railway (limited /dev/shm).
+CHROMIUM_LAUNCH_ARGS = ["--disable-dev-shm-usage", "--no-sandbox"]
+
+
+async def launch_chromium(playwright: Playwright):
+    return await playwright.chromium.launch(
+        headless=True,
+        args=CHROMIUM_LAUNCH_ARGS,
+    )
 
 # Marketing / nav / site pages — not product drops
 _JUNK_NAME_RE = re.compile(
@@ -207,7 +218,7 @@ async def scrape_shopify_products(url: str, brand: str, max_items: int = MAX_ITE
     """Shopify collection / shop pages (Kith, Palace, etc.)."""
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await launch_chromium(p)
             try:
                 page = await browser.new_page()
                 await page.set_extra_http_headers({"User-Agent": DEFAULT_UA})
@@ -294,7 +305,7 @@ async def scrape_link_grid(
     """Generic product grid: find anchors matching link_pattern (substring)."""
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await launch_chromium(p)
             try:
                 page = await browser.new_page()
                 await page.set_extra_http_headers({"User-Agent": DEFAULT_UA})

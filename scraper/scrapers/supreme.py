@@ -6,7 +6,7 @@ from playwright.async_api import Locator, async_playwright
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 
-from scrapers._common import filter_shoe_drops, is_shoe_drop
+from scrapers._common import filter_shoe_drops, is_shoe_drop, launch_chromium
 
 BASE_URL = "https://www.supremenewyork.com"
 SHOES_URL = f"{BASE_URL}/shop/shoes"
@@ -90,7 +90,7 @@ async def _extract_product(card: Locator, page_url: str) -> dict | None:
 async def scrape_supreme() -> list[dict]:
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await launch_chromium(p)
             try:
                 page = await browser.new_page()
                 await page.goto(SHOES_URL)
