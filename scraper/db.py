@@ -1,16 +1,100 @@
+import logging
 import os
 import secrets
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any, Literal, Optional
+from urllib.parse import urlparse, urlunparse
 
 import psycopg2
-from dotenv import load_dotenv
 from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import RealDictCursor
 
+from config import get_database_url, load_env
 
-# Prefer values from scraper/.env over a stale DATABASE_URL exported in the shell
-# (default dotenv behavior leaves existing env vars untouched).
-load_dotenv(override=True)
+load_env()
+
+log = logging.getLogger(__name__)
+
+_schema_ready = False
+
+DropWriteAction = Literal["inserted", "updated", "failed"]
+
+
+@dataclass(frozen=True)
+class DropWriteResult:
+    drop_id: Optional[int]
+    action: DropWriteAction
+    inserted: bool
+
+
+def normalize_product_url(url: str | None) -> str | None:
+    """Canonical URL for dedup (no query/fragment, trimmed path)."""
+    raw = (url or "").strip()
+    if not raw:
+        return None
+    parsed = urlparse(raw)
+    if not parsed.scheme or not parsed.netloc:
+        return raw.rstrip("/")
+    path = parsed.path.rstrip("/") or "/"
+    return urlunparse(
+        (parsed.scheme.lower(), parsed.netloc.lower(), path, "", "", "")
+    )
+
+
+def extract_product_id(url: str | None, explicit: str | None = None) -> str | None:
+    """Stable id from URL path tail or explicit scraper field."""
+    if explicit and str(explicit).strip():
+        return str(explicit).strip()
+    norm = normalize_product_url(url)
+    if not norm:
+        return None
+    path = urlparse(norm).path.strip("/")
+    if not path:
+        return None
+    return path.split("/")[-1] or path
+
+
+def ensure_drops_schema() -> None:
+    """Columns and indexes for URL / product_id upserts."""
+    global _schema_ready
+    if _schema_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "ALTER TABLE drops ADD COLUMN IF NOT EXISTS product_id TEXT"
+            )
+            cur.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS drops_brand_product_url_uidx
+                ON drops (brand, product_url)
+                WHERE product_url IS NOT NULL AND product_url <> ''
+                """
+            )
+            cur.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS drops_brand_product_id_uidx
+                ON drops (brand, product_id)
+                WHERE product_id IS NOT NULL AND product_id <> ''
+                """
+            )
+            cur.execute(
+                """
+                UPDATE drops
+                SET product_id = NULLIF(
+                  regexp_replace(
+                    regexp_replace(COALESCE(product_url, ''), '[?#].*$', ''),
+                    '.*/', ''
+                  ),
+                  ''
+                )
+                WHERE (product_id IS NULL OR product_id = '')
+                  AND product_url IS NOT NULL
+                  AND product_url <> ''
+                """
+            )
+        conn.commit()
+    _schema_ready = True
 
 
 def get_connection() -> PGConnection:
@@ -18,9 +102,7 @@ def get_connection() -> PGConnection:
     Opens a new psycopg2 connection using DATABASE_URL.
     Returns the connection object.
     """
-    database_url = (os.getenv("DATABASE_URL") or "").strip()
-    if not database_url:
-        raise RuntimeError("DATABASE_URL is not set in the environment")
+    database_url = get_database_url()
     # Railway public proxy (e.g. *.proxy.rlwy.net) expects TLS; without sslmode
     # libpq may negotiate poorly and the server closes the connection.
     if "sslmode=" not in database_url:
@@ -29,60 +111,205 @@ def get_connection() -> PGConnection:
     return psycopg2.connect(database_url)
 
 
-def insert_drop(drop: dict) -> Optional[int]:
-    """
-    Inserts a drop into the drops table.
-    Uses INSERT ... ON CONFLICT (brand, name) DO NOTHING.
-    Returns the new drop id if inserted, None if it already existed.
-    """
-    sql = """
-        INSERT INTO drops (brand, name, drop_date, price, image_url, product_url)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        ON CONFLICT (brand, name) DO NOTHING
-        RETURNING id
-    """
+def _find_drop_id(
+    cur: Any,
+    *,
+    brand: str,
+    name: str,
+    product_url: str | None,
+    product_id: str | None,
+) -> Optional[int]:
+    if product_url:
+        cur.execute(
+            """
+            SELECT id FROM drops
+            WHERE brand = %s AND product_url = %s
+            LIMIT 1
+            """,
+            (brand, product_url),
+        )
+        row = cur.fetchone()
+        if row:
+            return int(row[0])
 
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                sql,
-                (
-                    drop.get("brand"),
-                    drop.get("name"),
-                    drop.get("drop_date"),
-                    drop.get("price"),
-                    drop.get("image_url"),
-                    drop.get("product_url"),
-                ),
-            )
-            row = cur.fetchone()
-            return int(row[0]) if row else None
+    if product_id:
+        cur.execute(
+            """
+            SELECT id FROM drops
+            WHERE brand = %s AND product_id = %s
+            LIMIT 1
+            """,
+            (brand, product_id),
+        )
+        row = cur.fetchone()
+        if row:
+            return int(row[0])
 
-
-def touch_drop(drop: dict) -> None:
-    """Refresh scrape metadata so existing items sort to the top of the feed."""
-    sql = """
-        UPDATE drops
-        SET drop_date = %s,
-            price = %s,
-            image_url = %s,
-            product_url = %s,
-            scraped_at = NOW()
+    cur.execute(
+        """
+        SELECT id FROM drops
         WHERE brand = %s AND name = %s
+        LIMIT 1
+        """,
+        (brand, name),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
+def _prepare_drop_fields(drop: dict) -> dict[str, Any]:
+    brand = str(drop.get("brand") or "").strip()
+    name = str(drop.get("name") or "").strip()
+    product_url = normalize_product_url(drop.get("product_url"))
+    product_id = extract_product_id(product_url, drop.get("product_id"))
+    return {
+        "brand": brand,
+        "name": name,
+        "drop_date": drop.get("drop_date"),
+        "price": drop.get("price"),
+        "image_url": drop.get("image_url"),
+        "product_url": product_url,
+        "product_id": product_id,
+    }
+
+
+def upsert_drop(drop: dict) -> DropWriteResult:
     """
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                sql,
-                (
-                    drop.get("drop_date"),
-                    drop.get("price"),
-                    drop.get("image_url"),
-                    drop.get("product_url"),
-                    drop.get("brand"),
-                    drop.get("name"),
-                ),
-            )
+    Insert a new drop or update an existing row matched by product_url,
+    product_id, or (brand, name). Refreshes scraped_at on update.
+
+    Frontend reads these rows via Vercel GET /api/feed → frontend/lib/db.getDrops().
+    Both services must use the same DATABASE_URL (Railway Postgres).
+    """
+    fields = _prepare_drop_fields(drop)
+    brand = fields["brand"]
+    name = fields["name"]
+
+    if not brand or not name:
+        log.error(
+            "Drop write FAILED: missing brand or name (brand=%r name=%r)",
+            brand,
+            name,
+        )
+        return DropWriteResult(drop_id=None, action="failed", inserted=False)
+
+    try:
+        ensure_drops_schema()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                existing_id = _find_drop_id(
+                    cur,
+                    brand=brand,
+                    name=name,
+                    product_url=fields["product_url"],
+                    product_id=fields["product_id"],
+                )
+
+                if existing_id is not None:
+                    cur.execute(
+                        """
+                        UPDATE drops
+                        SET name = %s,
+                            drop_date = %s,
+                            price = %s,
+                            image_url = %s,
+                            product_url = COALESCE(%s, product_url),
+                            product_id = COALESCE(%s, product_id),
+                            scraped_at = NOW()
+                        WHERE id = %s
+                        RETURNING id
+                        """,
+                        (
+                            name,
+                            fields["drop_date"],
+                            fields["price"],
+                            fields["image_url"],
+                            fields["product_url"],
+                            fields["product_id"],
+                            existing_id,
+                        ),
+                    )
+                    row = cur.fetchone()
+                    drop_id = int(row[0]) if row else existing_id
+                    conn.commit()
+                    log.info(
+                        "Drop write OK: updated id=%s brand=%s name=%r url=%s",
+                        drop_id,
+                        brand,
+                        name,
+                        fields["product_url"] or "-",
+                    )
+                    return DropWriteResult(
+                        drop_id=drop_id, action="updated", inserted=False
+                    )
+
+                cur.execute(
+                    """
+                    INSERT INTO drops (
+                        brand, name, drop_date, price, image_url, product_url, product_id
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (brand, name) DO UPDATE SET
+                        drop_date = EXCLUDED.drop_date,
+                        price = EXCLUDED.price,
+                        image_url = EXCLUDED.image_url,
+                        product_url = COALESCE(EXCLUDED.product_url, drops.product_url),
+                        product_id = COALESCE(EXCLUDED.product_id, drops.product_id),
+                        scraped_at = NOW()
+                    RETURNING id, (xmax = 0) AS inserted
+                    """,
+                    (
+                        brand,
+                        name,
+                        fields["drop_date"],
+                        fields["price"],
+                        fields["image_url"],
+                        fields["product_url"],
+                        fields["product_id"],
+                    ),
+                )
+                row = cur.fetchone()
+                if not row:
+                    conn.commit()
+                    log.error(
+                        "Drop write FAILED: no row returned brand=%s name=%r",
+                        brand,
+                        name,
+                    )
+                    return DropWriteResult(
+                        drop_id=None, action="failed", inserted=False
+                    )
+
+                drop_id = int(row[0])
+                inserted = bool(row[1])
+                conn.commit()
+                action: DropWriteAction = "inserted" if inserted else "updated"
+                log.info(
+                    "Drop write OK: %s id=%s brand=%s name=%r url=%s",
+                    action,
+                    drop_id,
+                    brand,
+                    name,
+                    fields["product_url"] or "-",
+                )
+                return DropWriteResult(
+                    drop_id=drop_id, action=action, inserted=inserted
+                )
+    except Exception as exc:
+        log.exception(
+            "Drop write FAILED: brand=%s name=%r url=%s — %s",
+            brand,
+            name,
+            fields.get("product_url") or "-",
+            exc,
+        )
+        return DropWriteResult(drop_id=None, action="failed", inserted=False)
+
+
+def insert_drop(drop: dict) -> Optional[int]:
+    """Backward-compatible wrapper; returns id only on insert."""
+    result = upsert_drop(drop)
+    return result.drop_id if result.inserted else None
 
 
 def ensure_subscriber_schema() -> None:

@@ -11,4 +11,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY scraper/ .
 
-CMD ["python", "scheduler.py"]
+RUN chmod +x start.sh
+
+CMD ["./start.sh"]

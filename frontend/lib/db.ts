@@ -2,6 +2,8 @@ import { Pool } from "pg";
 
 import { filterShoeDrops } from "@/lib/shoeFilter";
 
+/** Shared with Railway scraper (`scraper/db.py` → `drops` table). */
+
 declare global {
   // eslint-disable-next-line no-var -- required for global singleton pattern in Next.js
   var pgPool: Pool | undefined;
@@ -41,11 +43,12 @@ const DROP_COLUMNS = `
   id, brand, name, drop_date, price, image_url, product_url, scraped_at
 `.trim();
 
+/** Latest drops written by the scraper; ordered by scrape time (newest first). */
 export async function getDrops(limit = 50) {
   const { rows } = await pool.query(
     `SELECT ${DROP_COLUMNS}
      FROM drops
-     ORDER BY scraped_at DESC
+     ORDER BY scraped_at DESC NULLS LAST, id DESC
      LIMIT $1`,
     [limit * 3]
   );

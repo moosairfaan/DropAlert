@@ -52,16 +52,23 @@ scheduler.py (APScheduler every 30min)
     └── pipeline.py (orchestrator)
          ├── scrapers/ (Playwright → drops list)
          ├── redis_client.py (dedup check)
-         ├── db.py (insert drop + get subscribers)
+         ├── db.py (upsert drop + get subscribers)
          └── alerts/ (Resend email)
+
+Postgres `drops` table
+    └── Vercel GET /api/feed (no cache) ← ProductList polls every 15s
 ```
+
+See [DATA_FLOW.md](./DATA_FLOW.md) for the full scraper → DB → API → UI path.
 
 ## Local Development
 
 ```bash
 cd scraper && pip install -r requirements.txt && playwright install chromium
 # Create scraper/.env with DATABASE_URL, REDIS_URL, Resend, etc.
-python scheduler.py
+python scheduler.py          # every 30 min (local worker)
+# python run_scrape.py         # one-shot (same as Railway cron)
+# python http_server.py        # POST http://localhost:8080/api/scrape
 ```
 
 ```bash
@@ -75,4 +82,4 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Deploy
 
 - **Frontend (Vercel):** set **Root Directory** to **`frontend`**. See [VERCEL.md](./VERCEL.md) if you get “No Next.js version detected”.
-- **Scraper (Railway):** set **Root Directory** to **`scraper`**, use the Dockerfile there.
+- **Scraper (Railway):** set **Root Directory** to **`scraper`**, use the Dockerfile there. **Required:** add `DATABASE_URL`, `REDIS_URL`, `RESEND_API_KEY`, `ALERT_FROM_EMAIL`, `DROPALERT_APP_URL` on the **scraper service** — see [scraper/RAILWAY.md](./scraper/RAILWAY.md).

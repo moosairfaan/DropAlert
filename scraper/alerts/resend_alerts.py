@@ -15,9 +15,9 @@ from html import escape
 from urllib.parse import quote
 
 import resend
-from dotenv import load_dotenv
+from config import load_env
 
-load_dotenv(override=True)
+load_env()
 
 log = logging.getLogger(__name__)
 

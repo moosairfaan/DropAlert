@@ -1,9 +1,9 @@
 import time
 
 import redis, os
-from dotenv import load_dotenv
+from config import load_env
 
-load_dotenv(override=True)
+load_env()
 
 r = redis.from_url(os.getenv("REDIS_URL"), decode_responses=True)
 

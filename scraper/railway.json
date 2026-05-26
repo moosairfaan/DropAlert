@@ -5,6 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "python scheduler.py"
+    "startCommand": "python scheduler.py",
+    "restartPolicyType": "ON_FAILURE"
   }
 }

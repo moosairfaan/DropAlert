@@ -1,5 +1,10 @@
 import type { DropRow } from "@/lib/dropDisplay";
 
+export type FeedFilterOptions = {
+  brand: string | null;
+  hypeOnly: boolean;
+};
+
 /** Client-side hype filter keywords (name only). */
 const HYPE_PATTERNS: RegExp[] = [
   /\bcollab\b/i,
@@ -26,7 +31,7 @@ export function filterDropsByBrand(
 
 export function filterDropsClient(
   drops: DropRow[],
-  opts: { brand: string | null; hypeOnly: boolean }
+  opts: FeedFilterOptions
 ): DropRow[] {
   let out = filterDropsByBrand(drops, opts.brand);
   if (opts.hypeOnly) out = out.filter(isHypeDrop);

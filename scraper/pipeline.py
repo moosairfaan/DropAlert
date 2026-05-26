@@ -13,8 +13,8 @@ from scrapers.asics import scrape_asics
 from scrapers.kith import scrape_kith
 from scrapers.palace import scrape_palace
 from db import (
-    insert_drop,
-    touch_drop,
+    ensure_drops_schema,
+    upsert_drop,
     prune_non_shoe_drops,
     get_subscribers_for_brand,
     has_alert_been_sent,
@@ -58,8 +58,15 @@ async def run_pipeline() -> dict:
     Returns a summary dict of what happened.
     """
     start = datetime.now()
-    summary = {"new_drops": 0, "alerts_sent": 0, "errors": []}
+    summary = {
+        "new_drops": 0,
+        "updated_drops": 0,
+        "write_failures": 0,
+        "alerts_sent": 0,
+        "errors": [],
+    }
 
+    ensure_drops_schema()
     removed = prune_non_shoe_drops()
     if removed:
         log.info("Pruned %d non-shoe / promo rows from database", removed)
@@ -85,29 +92,32 @@ async def run_pipeline() -> dict:
         brand = drop["brand"]
         name = drop["name"]
 
+        write = upsert_drop(drop)
+        if write.action == "failed" or write.drop_id is None:
+            summary["write_failures"] += 1
+            continue
+
+        if write.inserted:
+            summary["new_drops"] += 1
+            log.info("NEW DROP: %s - %s", brand, name)
+        else:
+            summary["updated_drops"] += 1
+
         if is_already_alerted(brand, name):
-            log.debug("SKIP (already alerted): %s - %s", brand, name)
+            log.debug("SKIP alerts (already alerted): %s - %s", brand, name)
             continue
 
-        drop_id = insert_drop(drop)
-        if drop_id is None:
-            touch_drop(drop)
-            if is_already_alerted(brand, name):
-                continue
+        if write.inserted:
+            alerts = await send_alerts_for_drop(write.drop_id, drop)
+            summary["alerts_sent"] += alerts
             mark_as_alerted(brand, name)
-            continue
-
-        log.info("NEW DROP: %s - %s", brand, name)
-        summary["new_drops"] += 1
-        alerts = await send_alerts_for_drop(drop_id, drop)
-        summary["alerts_sent"] += alerts
-
-        mark_as_alerted(brand, name)
 
     elapsed = (datetime.now() - start).total_seconds()
     log.info(
-        "Pipeline complete: %d new drops, %d alerts sent, %.1fs",
+        "Pipeline complete: %d new, %d updated, %d write failures, %d alerts sent, %.1fs",
         summary["new_drops"],
+        summary["updated_drops"],
+        summary["write_failures"],
         summary["alerts_sent"],
         elapsed,
     )

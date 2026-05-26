@@ -11,4 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "scheduler.py"]
+RUN chmod +x start.sh
+
+# Default: long-running scheduler (every 30 min). Override with SCRAPER_MODE or start command.
+CMD ["./start.sh"]
