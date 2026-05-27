@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { CountdownTimer } from "@/components/CountdownTimer";
 import {
@@ -48,52 +48,55 @@ export function ProductList({
 }: Props) {
   const [drops, setDrops] = useState(initialDrops);
   const fingerprintRef = useRef(feedFingerprint(initialDrops, {}));
+  const onFeedUpdateRef = useRef(onFeedUpdate);
+
+  onFeedUpdateRef.current = onFeedUpdate;
 
   const visibleDrops = useMemo(
     () => filterDropsClient(drops, filter),
     [drops, filter]
   );
 
-  const loadProducts = useCallback(async () => {
-    try {
-      const result = await fetchFeed();
+  useEffect(() => {
+    async function loadProducts() {
+      try {
+        const result = await fetchFeed();
 
-      if (!result.ok) {
-        onFeedUpdate?.({
+        if (!result.ok) {
+          onFeedUpdateRef.current?.({
+            drops: result.drops,
+            stats: result.stats,
+            updatedAt: result.updatedAt,
+            error: result.error,
+            changed: false,
+          });
+          return;
+        }
+
+        const nextFp = feedFingerprint(result.drops, result.stats);
+        const changed = nextFp !== fingerprintRef.current;
+        fingerprintRef.current = nextFp;
+
+        setDrops(result.drops);
+
+        onFeedUpdateRef.current?.({
           drops: result.drops,
           stats: result.stats,
           updatedAt: result.updatedAt,
-          error: result.error,
+          error: null,
+          changed,
+        });
+      } catch {
+        onFeedUpdateRef.current?.({
+          drops: [],
+          stats: {},
+          updatedAt: null,
+          error: "Could not reach the server to refresh.",
           changed: false,
         });
-        return;
       }
-
-      const nextFp = feedFingerprint(result.drops, result.stats);
-      const changed = nextFp !== fingerprintRef.current;
-      fingerprintRef.current = nextFp;
-
-      setDrops(result.drops);
-
-      onFeedUpdate?.({
-        drops: result.drops,
-        stats: result.stats,
-        updatedAt: result.updatedAt,
-        error: null,
-        changed,
-      });
-    } catch {
-      onFeedUpdate?.({
-        drops: [],
-        stats: {},
-        updatedAt: null,
-        error: "Could not reach the server to refresh.",
-        changed: false,
-      });
     }
-  }, [onFeedUpdate]);
 
-  useEffect(() => {
     void loadProducts();
 
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -130,7 +133,7 @@ export function ProductList({
       stopPolling();
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [loadProducts, refreshSignal]);
+  }, [refreshSignal]);
 
   if (drops.length === 0) {
     return (
