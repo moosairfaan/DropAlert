@@ -12,6 +12,13 @@ const VALID_BRANDS = BRANDS;
 
 export const dynamic = "force-dynamic";
 
+function isGmailAddress(raw: string): boolean {
+  const email = raw.trim().toLowerCase();
+  if (!email.includes("@")) return false;
+  const domain = email.split("@").pop() || "";
+  return domain === "gmail.com";
+}
+
 function pgErrCode(err: unknown): string | undefined {
   if (typeof err === "object" && err !== null && "code" in err) {
     const c = (err as { code?: unknown }).code;
@@ -68,6 +75,13 @@ export async function POST(req: NextRequest) {
     if (!emailRegex.test(email)) {
       return NextResponse.json(
         { error: "Please enter a valid email address." },
+        { status: 400 }
+      );
+    }
+
+    if (!isGmailAddress(email)) {
+      return NextResponse.json(
+        { error: "Please use a Gmail address (…@gmail.com)." },
         { status: 400 }
       );
     }

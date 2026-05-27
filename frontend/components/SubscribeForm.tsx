@@ -4,6 +4,13 @@ import { FormEvent, useState } from "react";
 
 import { BRAND_OPTIONS, labelForBrand } from "@/lib/brands";
 
+function isGmailAddress(raw: string): boolean {
+  const email = raw.trim().toLowerCase();
+  if (!email.includes("@")) return false;
+  const domain = email.split("@").pop() || "";
+  return domain === "gmail.com";
+}
+
 export function SubscribeForm() {
   const [email, setEmail] = useState("");
   const [brandPrefs, setBrandPrefs] = useState<string[]>([]);
@@ -26,6 +33,10 @@ export function SubscribeForm() {
 
     if (!email.trim()) {
       setError("Enter your email address.");
+      return;
+    }
+    if (!isGmailAddress(email)) {
+      setError("Please use a Gmail address (…@gmail.com).");
       return;
     }
     if (brandPrefs.length === 0) {
@@ -116,13 +127,14 @@ export function SubscribeForm() {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
+            placeholder="you@gmail.com"
             className="w-full border-4 border-black bg-[#fff8f0] px-3 py-3 text-base font-bold text-black placeholder:font-normal placeholder:italic placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#ffe600]"
           />
         </label>
-        <p className="text-xs font-medium italic text-neutral-600">
-          One field. We email you when we spot a new drop for your brands.
-        </p>
+        <div className="text-xs font-medium italic text-neutral-600">
+          <p>We currently support Gmail only (…@gmail.com) for the best deliverability.</p>
+          <p className="mt-1">We email you when we spot a new drop for your brands.</p>
+        </div>
 
         <div>
           <p className="mb-3 font-sans text-sm font-extrabold uppercase tracking-wide text-black">
