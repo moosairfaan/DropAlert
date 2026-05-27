@@ -2,11 +2,8 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 
-import {
-  brandBadgeClass,
-  formatPrice,
-  type DropRow,
-} from "@/lib/dropDisplay";
+import { getProductUrl } from "@/lib/productLinks";
+import { brandBadgeClass, formatPrice, type DropRow } from "@/lib/dropDisplay";
 import { dropsMentionedInResponse } from "@/lib/findDropMatch";
 
 type ChatMessage = {
@@ -212,9 +209,12 @@ export function FindMyDropChat({ drops }: Props) {
 }
 
 function DropMiniCard({ drop }: { drop: DropRow }) {
+  const shopUrl = getProductUrl(drop);
+  if (!shopUrl) return null;
+
   return (
     <a
-      href={drop.product_url || "#"}
+      href={shopUrl}
       target="_blank"
       rel="noopener noreferrer"
       className="flex gap-3 border-4 border-black bg-white p-2 transition hover:bg-[#ffe600]"

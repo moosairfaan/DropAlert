@@ -10,6 +10,11 @@ from psycopg2.extensions import connection as PGConnection
 from psycopg2.extras import RealDictCursor
 
 from config import get_database_url, load_env
+from scrapers._common import (
+    canonical_shopify_product_url,
+    extract_shopify_product_handle,
+    is_palace_product_handle,
+)
 
 load_env()
 
@@ -161,6 +166,12 @@ def _prepare_drop_fields(drop: dict) -> dict[str, Any]:
     brand = str(drop.get("brand") or "").strip()
     name = str(drop.get("name") or "").strip()
     product_url = normalize_product_url(drop.get("product_url"))
+    if brand.lower() == "palace":
+        handle = extract_shopify_product_handle(product_url)
+        if handle and is_palace_product_handle(handle):
+            product_url = canonical_shopify_product_url(handle)
+        elif handle:
+            product_url = None
     product_id = extract_product_id(product_url, drop.get("product_id"))
     return {
         "brand": brand,
@@ -213,8 +224,8 @@ def upsert_drop(drop: dict) -> DropWriteResult:
                             drop_date = %s,
                             price = %s,
                             image_url = %s,
-                            product_url = COALESCE(%s, product_url),
-                            product_id = COALESCE(%s, product_id),
+                            product_url = %s,
+                            product_id = %s,
                             scraped_at = NOW()
                         WHERE id = %s
                         RETURNING id
@@ -253,8 +264,8 @@ def upsert_drop(drop: dict) -> DropWriteResult:
                         drop_date = EXCLUDED.drop_date,
                         price = EXCLUDED.price,
                         image_url = EXCLUDED.image_url,
-                        product_url = COALESCE(EXCLUDED.product_url, drops.product_url),
-                        product_id = COALESCE(EXCLUDED.product_id, drops.product_id),
+                        product_url = EXCLUDED.product_url,
+                        product_id = EXCLUDED.product_id,
                         scraped_at = NOW()
                     RETURNING id, (xmax = 0) AS inserted
                     """,

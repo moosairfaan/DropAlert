@@ -10,6 +10,7 @@ import {
   type DropRow,
 } from "@/lib/dropDisplay";
 import { fetchFeed, FEED_POLL_MS, type FeedStats } from "@/lib/feedApi";
+import { getProductUrl } from "@/lib/productLinks";
 import { filterDropsClient, type FeedFilterOptions } from "@/lib/feedFilters";
 
 type FeedPayload = {
@@ -36,6 +37,7 @@ function feedFingerprint(drops: DropRow[], stats: FeedStats): string {
       row.price,
       row.name,
       row.image_url,
+      row.product_url,
     ]),
   });
 }
@@ -153,11 +155,39 @@ export function ProductList({
 
   return (
     <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-      {visibleDrops.map((drop) => (
+      {visibleDrops.map((drop) => {
+        const shopUrl = getProductUrl(drop);
+        return (
         <article
           key={drop.id}
           className="group flex flex-col overflow-hidden border-4 border-black bg-white shadow-pop transition hover:-translate-y-1 hover:shadow-pop-lg"
         >
+          {shopUrl ? (
+            <a
+              href={shopUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative block h-52 w-full shrink-0 border-b-4 border-black bg-[#ffe600]"
+            >
+              <span
+                className={`absolute left-3 top-3 z-10 border-2 border-black px-3 py-1 text-xs font-extrabold uppercase ${brandBadgeClass(drop.brand)}`}
+              >
+                {String(drop.brand).toUpperCase()}
+              </span>
+              {drop.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- external scrape URLs
+                <img
+                  src={drop.image_url}
+                  alt={drop.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-5xl">
+                  👟
+                </div>
+              )}
+            </a>
+          ) : (
           <div className="relative h-52 w-full shrink-0 border-b-4 border-black bg-[#ffe600]">
             <span
               className={`absolute left-3 top-3 z-10 border-2 border-black px-3 py-1 text-xs font-extrabold uppercase ${brandBadgeClass(drop.brand)}`}
@@ -177,9 +207,21 @@ export function ProductList({
               </div>
             )}
           </div>
+          )}
           <div className="flex flex-1 flex-col p-4">
             <h3 className="line-clamp-2 font-serif text-lg font-bold leading-snug text-black">
-              {drop.name}
+              {shopUrl ? (
+                <a
+                  href={shopUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                >
+                  {drop.name}
+                </a>
+              ) : (
+                drop.name
+              )}
             </h3>
             <p className="mt-2 font-sans text-2xl font-extrabold text-[#ff2d6f]">
               {formatPrice(drop.price)}
@@ -187,9 +229,9 @@ export function ProductList({
             <div className="mt-2">
               <CountdownTimer scrapedAt={scrapedAtIso(drop.scraped_at)} />
             </div>
-            {drop.product_url ? (
+            {shopUrl ? (
               <a
-                href={drop.product_url}
+                href={shopUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-4 block w-full border-4 border-black bg-[#2d5bff] py-3 text-center text-sm font-extrabold uppercase tracking-wide text-white transition hover:bg-[#2449d4]"
@@ -199,7 +241,8 @@ export function ProductList({
             ) : null}
           </div>
         </article>
-      ))}
+        );
+      })}
     </div>
   );
 }

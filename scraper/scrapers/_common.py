@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
@@ -181,6 +181,52 @@ def filter_shoe_drops(drops: list[dict]) -> list[dict]:
     return [d for d in drops if is_shoe_drop(d)]
 
 
+def extract_shopify_product_handle(url: str | None) -> str | None:
+    """Pull /products/{handle} from a Shopify product URL."""
+    raw = (url or "").strip()
+    if not raw:
+        return None
+    m = re.search(r"/products/([^/?#]+)", raw, re.I)
+    if not m:
+        return None
+    handle = m.group(1).strip().lower()
+    return handle or None
+
+
+def canonical_shopify_product_url(
+    handle: str, store_origin: str = "https://palaceskateboards.com"
+) -> str:
+    origin = store_origin.rstrip("/")
+    return f"{origin}/products/{handle}"
+
+
+def is_palace_product_handle(handle: str) -> bool:
+    """
+    Palace product handles are opaque ids (e.g. wbyj02l3ekil).
+    Human-readable slugs (palace-dr-martens-1461-cherry) 404 on the store.
+    """
+    h = (handle or "").strip().lower()
+    if not h or len(h) < 8:
+        return False
+    if re.fullmatch(r"[a-z0-9]{8,20}", h):
+        return True
+    return False
+
+
+def normalize_shopify_product_url(
+    url: str | None,
+    *,
+    store_origin: str = "https://palaceskateboards.com",
+    require_opaque_handle: bool = False,
+) -> str | None:
+    handle = extract_shopify_product_handle(url)
+    if not handle:
+        return None
+    if require_opaque_handle and not is_palace_product_handle(handle):
+        return None
+    return canonical_shopify_product_url(handle, store_origin)
+
+
 def parse_price(text: str) -> float | None:
     if not text:
         return None
@@ -273,6 +319,20 @@ async def scrape_shopify_products(url: str, brand: str, max_items: int = MAX_ITE
                     url_p = (item.get("product_url") or "").strip()
                     if not name or not url_p or name in seen_names:
                         continue
+                    handle = extract_shopify_product_handle(url_p)
+                    if handle:
+                        parsed = urlparse(url)
+                        origin = f"{parsed.scheme}://{parsed.netloc}" if parsed.netloc else ""
+                        if origin and "palace" in origin.lower():
+                            origin = "https://palaceskateboards.com"
+                        rebuilt = canonical_shopify_product_url(
+                            handle, origin or "https://palaceskateboards.com"
+                        )
+                        if "palace" in brand.lower() and not is_palace_product_handle(
+                            handle
+                        ):
+                            continue
+                        url_p = rebuilt
                     seen_names.add(name)
                     results.append(
                         make_drop(
