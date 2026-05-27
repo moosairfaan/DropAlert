@@ -19,6 +19,7 @@ The Next.js app lives in **`frontend/`**. Vercel must use that folder as the pro
    | `RESEND_API_KEY` | Welcome + (via scraper) drop alert emails |
    | `ALERT_FROM_EMAIL` | e.g. `alerts@moosairfaan.dev` |
    | `DROPALERT_APP_URL` | e.g. `https://dropalert-sigma.vercel.app` (unsubscribe links) |
+   | `ANTHROPIC_API_KEY` | Find My Drop chat + personalized alert filtering (scraper) |
 
    For local dev, copy `RESEND_API_KEY` and `ALERT_FROM_EMAIL` into `frontend/.env.local` too.
 

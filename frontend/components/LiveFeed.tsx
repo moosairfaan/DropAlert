@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+import { FindMyDropChat } from "@/components/FindMyDropChat";
 import { ProductList, PRODUCT_LIST_POLL_MS } from "@/components/ProductList";
 import { BRAND_OPTIONS } from "@/lib/brands";
 import { num, type DropRow } from "@/lib/dropDisplay";
@@ -35,6 +36,7 @@ export function LiveFeed({
   brandsMonitored,
 }: Props) {
   const [stats, setStats] = useState(initialStats);
+  const [drops, setDrops] = useState(initialDrops);
   const [dbError, setDbError] = useState(initialDbError);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -64,6 +66,7 @@ export function LiveFeed({
 
       setDbError(null);
       setStats(payload.stats);
+      setDrops(payload.drops);
       if (payload.updatedAt) setLastUpdated(payload.updatedAt);
       if (payload.changed) {
         setJustUpdated(true);
@@ -199,6 +202,8 @@ export function LiveFeed({
           onFeedUpdate={handleFeedUpdate}
         />
       </section>
+
+      <FindMyDropChat drops={drops} />
     </>
   );
 }

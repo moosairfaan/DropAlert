@@ -58,8 +58,6 @@ export function ProductList({
   );
 
   useEffect(() => {
-    console.log("useEffect fired", refreshSignal);
-
     async function loadProducts() {
       try {
         const result = await fetchFeed();
@@ -106,7 +104,6 @@ export function ProductList({
     const startPolling = () => {
       if (intervalId != null) return;
       intervalId = setInterval(() => {
-        console.log("polling tick, fetching feed...");
         void loadProducts();
       }, FEED_POLL_MS);
     };
