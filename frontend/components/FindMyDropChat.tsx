@@ -1,6 +1,14 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import ReactMarkdown from "react-markdown";
 
 import { getProductUrl } from "@/lib/productLinks";
 import { brandBadgeClass, formatPrice, type DropRow } from "@/lib/dropDisplay";
@@ -18,6 +26,106 @@ type Props = {
 
 const MAX_HISTORY = 4;
 
+const EXAMPLE_PROMPTS = [
+  "Travis Scott collabs",
+  "chunky retro under $150",
+  "white sneakers on sale",
+] as const;
+
+const markdownComponents = {
+  a: ({ href, children }: { href?: string; children?: ReactNode }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-bold text-[#2d5bff] underline underline-offset-2 hover:text-[#2449d4]"
+    >
+      {children}
+    </a>
+  ),
+  p: ({ children }: { children?: ReactNode }) => (
+    <p className="mb-2 last:mb-0">{children}</p>
+  ),
+  ul: ({ children }: { children?: ReactNode }) => (
+    <ul className="mb-2 list-disc pl-4 last:mb-0">{children}</ul>
+  ),
+  ol: ({ children }: { children?: ReactNode }) => (
+    <ol className="mb-2 list-decimal pl-4 last:mb-0">{children}</ol>
+  ),
+  li: ({ children }: { children?: ReactNode }) => (
+    <li className="mb-1 last:mb-0">{children}</li>
+  ),
+  strong: ({ children }: { children?: ReactNode }) => (
+    <strong className="font-extrabold">{children}</strong>
+  ),
+};
+
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <div className="markdown-message text-sm font-medium leading-relaxed">
+      <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+    </div>
+  );
+}
+
+function StreamingMarkdown({ content }: { content: string }) {
+  return (
+    <div className="is-streaming">
+      <MarkdownContent content={content} />
+    </div>
+  );
+}
+
+function StreamingWordText({ text }: { text: string }) {
+  const prevWordCountRef = useRef(0);
+  const words = text.match(/\S+\s*|\n/g) ?? [];
+  const prevCount = prevWordCountRef.current;
+
+  useLayoutEffect(() => {
+    prevWordCountRef.current = words.length;
+  }, [words.length]);
+
+  return (
+    <div className="text-sm font-medium leading-relaxed">
+      {words.map((word, i) => (
+        <span
+          key={i}
+          className={
+            i >= prevCount ? "animate-word-fade-in inline" : "inline"
+          }
+        >
+          {word}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function StreamingAssistantContent({ content }: { content: string }) {
+  const hasCompleteMarkdownLink = /\[.+?\]\(.+?\)/.test(content);
+  if (hasCompleteMarkdownLink) {
+    return <StreamingMarkdown content={content} />;
+  }
+  return <StreamingWordText text={content} />;
+}
+
+function TypingIndicator() {
+  return (
+    <div
+      className="mr-auto flex items-center gap-1 border-4 border-black bg-white px-4 py-3"
+      aria-label="AI is typing"
+    >
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="inline-block h-2 w-2 rounded-full bg-black animate-typing-dot"
+          style={{ animationDelay: `${i * 0.2}s` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function FindMyDropChat({ drops }: Props) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -25,8 +133,15 @@ export function FindMyDropChat({ drops }: Props) {
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fabBouncing, setFabBouncing] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const panelEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setFabBouncing(false), 4000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -35,18 +150,25 @@ export function FindMyDropChat({ drops }: Props) {
   }, [open]);
 
   useEffect(() => {
-    panelEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamText, open]);
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [messages, streamText, open, streaming, error]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     const query = input.trim();
     if (!query || streaming) return;
 
-    setError(null);
     setInput("");
+    setError(null);
     setStreaming(true);
     setStreamText("");
+
+    setMessages((prev) => {
+      const next: ChatMessage[] = [...prev, { role: "user", content: query }];
+      return next.slice(-MAX_HISTORY);
+    });
 
     const history = messages.slice(-MAX_HISTORY);
 
@@ -82,7 +204,6 @@ export function FindMyDropChat({ drops }: Props) {
       setMessages((prev) => {
         const next: ChatMessage[] = [
           ...prev,
-          { role: "user", content: query },
           { role: "assistant", content: full, matchedDrops },
         ];
         return next.slice(-MAX_HISTORY);
@@ -97,15 +218,20 @@ export function FindMyDropChat({ drops }: Props) {
     }
   }
 
+  function onPromptChipClick(prompt: string) {
+    setInput(prompt);
+    inputRef.current?.focus();
+  }
+
   return (
     <>
       {open ? (
         <div
-          className="fixed bottom-24 right-4 z-50 flex w-[min(100vw-2rem,380px)] flex-col border-4 border-black bg-[#fff8f0] shadow-pop-lg sm:right-6"
+          className="fixed bottom-24 right-4 z-50 flex h-[min(85vh,560px)] w-[min(100vw-2rem,440px)] flex-col border-4 border-black bg-[#fff8f0] shadow-pop-lg sm:right-6"
           role="dialog"
           aria-label="Find My Drop chat"
         >
-          <div className="flex items-center justify-between border-b-4 border-black bg-[#ffe600] px-4 py-3">
+          <div className="flex shrink-0 items-center justify-between border-b-4 border-black bg-[#ffe600] px-4 py-3">
             <div>
               <p className="font-serif text-lg font-bold italic">Find My Drop</p>
               <p className="text-xs font-bold uppercase tracking-wide text-black/70">
@@ -122,24 +248,32 @@ export function FindMyDropChat({ drops }: Props) {
             </button>
           </div>
 
-          <div className="flex max-h-80 flex-col gap-3 overflow-y-auto p-4">
+          <div
+            ref={scrollRef}
+            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+          >
             {messages.length === 0 && !streaming ? (
               <p className="font-serif text-sm italic text-neutral-600">
-                Try &quot;Travis Scott collabs under $200&quot; or &quot;chunky
-                retro runners in white&quot;
+                Ask about style, brand, or budget — or tap a suggestion below.
               </p>
             ) : null}
 
             {messages.map((msg, i) => (
               <div key={`${msg.role}-${i}`} className="flex flex-col gap-2">
                 <div
-                  className={`max-w-[95%] border-4 border-black px-3 py-2 text-sm font-medium leading-relaxed ${
+                  className={`max-w-[95%] border-4 border-black px-3 py-2 ${
                     msg.role === "user"
                       ? "ml-auto bg-[#2d5bff] text-white"
                       : "mr-auto bg-white"
                   }`}
                 >
-                  {msg.content}
+                  {msg.role === "user" ? (
+                    <p className="text-sm font-medium leading-relaxed">
+                      {msg.content}
+                    </p>
+                  ) : (
+                    <MarkdownContent content={msg.content} />
+                  )}
                 </div>
                 {msg.role === "assistant" && msg.matchedDrops?.length ? (
                   <div className="flex flex-col gap-2">
@@ -152,17 +286,15 @@ export function FindMyDropChat({ drops }: Props) {
             ))}
 
             {streaming && streamText ? (
-              <div className="mr-auto max-w-[95%] border-4 border-black bg-white px-3 py-2 text-sm font-medium leading-relaxed">
-                {streamText}
-                <span className="animate-pulse">▌</span>
+              <div className="mr-auto max-w-[95%] border-4 border-black bg-white px-3 py-2">
+                <StreamingAssistantContent content={streamText} />
+                <span className="ml-0.5 inline-block animate-pulse text-[#2d5bff]">
+                  ▌
+                </span>
               </div>
             ) : null}
 
-            {streaming && !streamText ? (
-              <p className="text-xs font-bold uppercase tracking-wide text-neutral-500">
-                Searching drops…
-              </p>
-            ) : null}
+            {streaming && !streamText ? <TypingIndicator /> : null}
 
             {error ? (
               <p className="border-4 border-black bg-[#ff2d6f] px-3 py-2 text-xs font-bold text-white">
@@ -173,34 +305,48 @@ export function FindMyDropChat({ drops }: Props) {
             <div ref={panelEndRef} />
           </div>
 
-          <form
-            onSubmit={onSubmit}
-            className="flex gap-2 border-t-4 border-black bg-white p-3"
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              disabled={streaming}
-              placeholder="Describe what you're looking for…"
-              className="min-w-0 flex-1 border-4 border-black bg-[#fff8f0] px-3 py-2 text-sm font-medium placeholder:italic placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#ffe600]"
-            />
-            <button
-              type="submit"
-              disabled={streaming || !input.trim()}
-              className="shrink-0 border-4 border-black bg-[#ff2d6f] px-3 py-2 text-xs font-extrabold uppercase text-white hover:bg-[#e82663] disabled:opacity-50"
-            >
-              Send
-            </button>
-          </form>
+          <div className="shrink-0 border-t-4 border-black bg-white p-3">
+            <div className="mb-2 flex flex-wrap gap-2">
+              {EXAMPLE_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  disabled={streaming}
+                  onClick={() => onPromptChipClick(prompt)}
+                  className="border-2 border-black bg-[#fff8f0] px-2.5 py-1 text-xs font-bold text-black transition hover:bg-[#ffe600] disabled:opacity-50"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+            <form onSubmit={onSubmit} className="flex gap-2">
+              <input
+                ref={inputRef}
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                disabled={streaming}
+                placeholder="Describe what you're looking for…"
+                className="min-w-0 flex-1 border-4 border-black bg-[#fff8f0] px-3 py-2.5 text-sm font-medium placeholder:italic placeholder:text-neutral-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#ffe600]"
+              />
+              <button
+                type="submit"
+                disabled={streaming || !input.trim()}
+                className="shrink-0 border-4 border-black bg-[#ff2d6f] px-4 py-2.5 text-xs font-extrabold uppercase text-white hover:bg-[#e82663] disabled:opacity-50"
+              >
+                Send
+              </button>
+            </form>
+          </div>
         </div>
       ) : null}
 
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-4 right-4 z-50 border-4 border-black bg-[#ffe600] px-4 py-3 font-extrabold uppercase tracking-wide shadow-pop transition hover:-translate-y-0.5 hover:shadow-pop-lg sm:right-6"
+        className={`fixed bottom-4 right-4 z-50 border-4 border-black bg-[#ffe600] px-4 py-3 font-extrabold uppercase tracking-wide shadow-pop transition hover:-translate-y-0.5 hover:shadow-pop-lg sm:right-6 ${
+          fabBouncing ? "animate-fab-bounce" : ""
+        }`}
       >
         🔍 Find My Drop
       </button>

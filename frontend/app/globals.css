@@ -44,3 +44,81 @@ body {
 .shadow-pop-lg {
   box-shadow: 6px 6px 0 0 var(--border);
 }
+
+@keyframes word-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-word-fade-in {
+  animation: word-fade-in 0.28s ease-out forwards;
+}
+
+@keyframes fab-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-8px);
+  }
+  50% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-fab-bounce {
+  animation: fab-bounce 1.8s ease-in-out 2;
+}
+
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+
+.animate-typing-dot {
+  animation: typing-dot 1.2s ease-in-out infinite;
+}
+
+.markdown-message p {
+  margin: 0 0 0.5rem;
+}
+
+.markdown-message p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-message ul,
+.markdown-message ol {
+  margin: 0.25rem 0 0.5rem;
+  padding-left: 1.25rem;
+}
+
+.markdown-message li {
+  margin-bottom: 0.25rem;
+}
+
+.markdown-message strong {
+  font-weight: 800;
+}
+
+.is-streaming .markdown-message > :last-child {
+  animation: word-fade-in 0.28s ease-out forwards;
+}
