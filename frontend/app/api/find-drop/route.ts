@@ -5,7 +5,7 @@ import type { DropRow } from "@/lib/dropDisplay";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL = "claude-sonnet-4-5-20251001";
 
 const SYSTEM_PROMPT = `You are a sneaker and streetwear expert helping users find drops from a live feed.
 Given the user's request and the list of current drops, recommend the 2-3 best matches.
